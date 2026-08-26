@@ -1,0 +1,13 @@
+{
+  "realm": "tino",
+  "enabled": true,
+  "clients": [
+    {
+      "clientId": "tino-android",
+      "publicClient": true,
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": true,
+      "redirectUris": ["tino://oauth/callback"]
+    }
+  ]
+}
