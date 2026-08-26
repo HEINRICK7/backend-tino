@@ -127,6 +127,7 @@ Flyway: PASS | FAIL
 jOOQ: PASS | FAIL
 PostgreSQL Compose: PASS | FAIL
 Keycloak Compose: PASS | FAIL
+Git/GitHub: PASS | FAIL
 Scope Leakage: NONE | FOUND
 
 M1 AUTHORIZED: NO

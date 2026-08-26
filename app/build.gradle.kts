@@ -22,7 +22,11 @@ dependencies {
     implementation(libs.spring.modulith.starter.core)
     implementation(libs.springdoc.openapi)
     implementation(libs.resilience4j.spring.boot4)
-    implementation(libs.otel.spring.boot)
+    implementation(libs.otel.spring.boot) {
+        exclude(group = "io.opentelemetry.instrumentation", module = "opentelemetry-kafka-clients-2.6")
+        exclude(group = "io.opentelemetry.instrumentation", module = "opentelemetry-kafka-clients-common-0.11")
+        exclude(group = "io.opentelemetry.instrumentation", module = "opentelemetry-spring-kafka-2.7")
+    }
     implementation(libs.micrometer.otel)
     implementation(libs.flyway.core)
     implementation(libs.flyway.postgresql)
