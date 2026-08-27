@@ -91,7 +91,8 @@ class M3BusinessHttpApiTest {
                 POSTGRES.getJdbcUrl(), M2PostgresTestContainer.MIGRATOR,
                 POSTGRES.migratorPassword());
                 var statement = connection.createStatement()) {
-            statement.execute("TRUNCATE TABLE public.business_memberships, public.businesses, public.users");
+            statement.execute("TRUNCATE TABLE public.device_installations, "
+                    + "public.business_memberships, public.businesses, public.users");
         }
     }
 

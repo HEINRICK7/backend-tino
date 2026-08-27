@@ -1,11 +1,15 @@
 package com.tino.backend.business;
 
+import com.tino.backend.business.application.exception.BusinessAccessDeniedException;
+import com.tino.backend.business.application.port.in.BusinessAuthorization;
+import com.tino.backend.business.application.port.in.BusinessAuthorizationDeniedException;
 import com.tino.backend.business.application.port.out.BusinessMembershipRepository;
 import com.tino.backend.business.application.port.out.BusinessRepository;
 import com.tino.backend.business.application.usecase.CreateBusiness;
 import com.tino.backend.business.application.usecase.ExecuteAuthorizedBusinessOperation;
 import com.tino.backend.business.application.usecase.ListUserBusinesses;
 import com.tino.backend.business.application.usecase.ResolveBusinessAccess;
+import com.tino.backend.business.domain.model.UserId;
 import com.tino.backend.shared.kernel.TenantContextExecutor;
 import com.tino.backend.shared.kernel.UuidGenerator;
 import java.time.Clock;
@@ -36,5 +40,24 @@ public class BusinessConfiguration {
     ExecuteAuthorizedBusinessOperation executeAuthorizedBusinessOperation(
             ResolveBusinessAccess access, TenantContextExecutor tenantContext) {
         return new ExecuteAuthorizedBusinessOperation(access, tenantContext);
+    }
+
+    @Bean
+    BusinessAuthorization businessAuthorization(ExecuteAuthorizedBusinessOperation authorized) {
+        return new BusinessAuthorization() {
+            @Override
+            public <T> T execute(
+                    java.util.UUID authenticatedUserId,
+                    com.tino.backend.shared.kernel.BusinessId requestedBusinessId,
+                    java.util.function.Function<com.tino.backend.shared.kernel.BusinessId, T> operation) {
+                try {
+                    return authorized.execute(
+                            new UserId(authenticatedUserId), requestedBusinessId,
+                            context -> operation.apply(context.businessId()));
+                } catch (BusinessAccessDeniedException exception) {
+                    throw new BusinessAuthorizationDeniedException();
+                }
+            }
+        };
     }
 }
