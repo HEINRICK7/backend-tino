@@ -3,12 +3,14 @@ services:
     image: postgres:17-alpine
     environment:
       POSTGRES_USER: tino_admin
-      POSTGRES_PASSWORD: tino_admin
+      POSTGRES_PASSWORD: ${TINO_POSTGRES_ADMIN_PASSWORD:?Run ./scripts/create-local-env.sh}
       POSTGRES_DB: tino
+      TINO_POSTGRES_APP_PASSWORD: ${TINO_POSTGRES_APP_PASSWORD:?Run ./scripts/create-local-env.sh}
+      TINO_POSTGRES_MIGRATOR_PASSWORD: ${TINO_POSTGRES_MIGRATOR_PASSWORD:?Run ./scripts/create-local-env.sh}
     ports: ["${TINO_POSTGRES_PORT:-5432}:5432"]
     volumes:
       - tino-postgres:/var/lib/postgresql/data
-      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/00-roles.sql:ro
+      - ./docker/postgres/init.sh:/docker-entrypoint-initdb.d/00-roles.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U tino_admin -d tino"]
       interval: 5s
@@ -20,7 +22,7 @@ services:
     command: start-dev --import-realm
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
-      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${TINO_KEYCLOAK_ADMIN_PASSWORD:?Run ./scripts/create-local-env.sh}
     ports: ["${TINO_KEYCLOAK_PORT:-8081}:8080"]
     volumes:
       - ./docker/keycloak/tino-realm.json:/opt/keycloak/data/import/tino-realm.json:ro

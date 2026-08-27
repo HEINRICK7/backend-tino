@@ -29,7 +29,7 @@ jooq {
             url = providers.environmentVariable("JOOQ_JDBC_URL")
                 .orElse("jdbc:postgresql://localhost:5432/tino").get()
             user = providers.environmentVariable("JOOQ_JDBC_USER").orElse("tino_migrator").get()
-            password = providers.environmentVariable("JOOQ_JDBC_PASSWORD").orElse("tino_migrator").get()
+            password = providers.environmentVariable("JOOQ_JDBC_PASSWORD").orElse("").get()
         }
         generator {
             database {

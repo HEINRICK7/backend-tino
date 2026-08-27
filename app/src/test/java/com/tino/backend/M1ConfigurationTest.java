@@ -15,9 +15,9 @@ class M1ConfigurationTest {
             var yaml = new String(resource.readAllBytes(), StandardCharsets.UTF_8);
 
             assertThat(yaml).contains("username: ${SPRING_DATASOURCE_USERNAME:tino_app}");
-            assertThat(yaml).contains("password: ${SPRING_DATASOURCE_PASSWORD:}");
+            assertThat(yaml).contains("password: ${SPRING_DATASOURCE_PASSWORD}");
             assertThat(yaml).contains("user: ${SPRING_FLYWAY_USER:tino_migrator}");
-            assertThat(yaml).contains("password: ${SPRING_FLYWAY_PASSWORD:}");
+            assertThat(yaml).contains("password: ${SPRING_FLYWAY_PASSWORD}");
             assertThat(yaml).doesNotContain("${SPRING_FLYWAY_USER:${spring.datasource.username}}");
         }
     }
