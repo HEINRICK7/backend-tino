@@ -19,7 +19,8 @@ class M1ArchitectureTest {
                 root.resolve("shared/kernel/src/main"),
                 root.resolve("modules/identity/src/main/java/com/tino/backend/identity/domain"),
                 root.resolve("modules/identity/src/main/java/com/tino/backend/identity/application"),
-                root.resolve("modules/business/src/main"),
+                root.resolve("modules/business/src/main/java/com/tino/backend/business/domain"),
+                root.resolve("modules/business/src/main/java/com/tino/backend/business/application"),
                 root.resolve("modules/device/src/main"),
                 root.resolve("modules/sync/src/main"),
                 root.resolve("app/src/main/java"));
@@ -28,6 +29,10 @@ class M1ArchitectureTest {
                 .doesNotContain("org.jooq")
                 .doesNotContain("DSLContext")
                 .doesNotContain("org.jooq.impl"));
+
+        sourceTexts(List.of(root.resolve(
+                "modules/business/src/main/java/com/tino/backend/business/adapter/out/persistence")))
+                .forEach(source -> assertThat(source).contains("org.jooq").contains("DSLContext"));
     }
 
     @Test

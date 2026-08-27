@@ -1,8 +1,11 @@
 package com.tino.backend.identity.adapter.in.security;
 
 import com.tino.backend.identity.application.port.in.AuthenticatedPrincipal;
+import com.tino.backend.identity.application.port.in.AuthenticatedUserResolver;
+import com.tino.backend.identity.application.port.in.AuthenticatedUserSnapshot;
 import com.tino.backend.identity.application.port.out.UserRepository;
 import com.tino.backend.identity.application.usecase.ResolveAuthenticatedUser;
+import com.tino.backend.identity.domain.model.UserStatus;
 import com.tino.backend.shared.kernel.UuidGenerator;
 import com.tino.backend.shared.kernel.UuidV7Generator;
 import java.time.Clock;
@@ -29,6 +32,15 @@ public class IdentitySecurityConfiguration {
     ResolveAuthenticatedUser resolveAuthenticatedUser(
             UserRepository users, UuidGenerator ids, Clock clock) {
         return new ResolveAuthenticatedUser(users, ids, clock);
+    }
+
+    @Bean
+    AuthenticatedUserResolver authenticatedUserResolver(ResolveAuthenticatedUser users) {
+        return principal -> {
+            var user = users.execute(principal);
+            return new AuthenticatedUserSnapshot(
+                    user.id().value(), user.status() == UserStatus.ACTIVE);
+        };
     }
 
     @Bean

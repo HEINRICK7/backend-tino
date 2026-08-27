@@ -38,6 +38,7 @@ dependencies {
     testImplementation(libs.testcontainers.junit)
     testImplementation(libs.testcontainers.postgresql)
     testImplementation(libs.archunit.junit)
+    testImplementation("org.springframework.security:spring-security-test")
 }
 
 tasks.test { maxParallelForks = 1 }
