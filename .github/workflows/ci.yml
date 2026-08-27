@@ -20,7 +20,15 @@ jobs:
           java-version: "21"
           cache: gradle
       - uses: gradle/actions/setup-gradle@v4
-      - name: Validate Compose
-        run: docker compose config --quiet
+      - name: Scan tracked files for hardcoded secrets
+        run: ./scripts/secret-scan.sh
+      - name: Validate Compose with runtime-generated credentials
+        run: |
+          ./scripts/create-local-env.sh
+          docker compose config --quiet
       - name: Build, tests and architecture
-        run: ./gradlew clean build architecture --no-daemon
+        run: |
+          set -a
+          . ./.env
+          set +a
+          ./gradlew clean build architecture --no-daemon

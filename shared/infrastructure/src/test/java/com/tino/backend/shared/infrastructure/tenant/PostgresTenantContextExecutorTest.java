@@ -38,16 +38,16 @@ class PostgresTenantContextExecutorTest {
     private static JdbcTemplate app;
     private static DSLContext appDsl;
     private static PostgresTenantContextExecutor executor;
-    private static String appPassword;
+    private static String ephemeralCredential;
 
     @BeforeAll
     static void createRoleAndFixture() {
-        appPassword = "m1-test-" + UUID.randomUUID();
+        ephemeralCredential = UUID.randomUUID().toString();
         adminDataSource = dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword(), 2);
         admin = new JdbcTemplate(adminDataSource);
         createAppRoleAndProbeTable();
 
-        appDataSource = dataSource(POSTGRES.getJdbcUrl(), APP_ROLE, appPassword, 1);
+        appDataSource = dataSource(POSTGRES.getJdbcUrl(), APP_ROLE, ephemeralCredential, 1);
         appDataSource.setMinimumIdle(1);
         app = new JdbcTemplate(appDataSource);
         var transactionManager = new DataSourceTransactionManager(appDataSource);
@@ -210,7 +210,7 @@ class PostgresTenantContextExecutorTest {
     }
 
     private static void createAppRoleAndProbeTable() {
-        admin.execute("create role tino_app login password '" + appPassword
+        admin.execute("create role tino_app login password '" + ephemeralCredential
                 + "' nosuperuser nobypassrls nocreatedb nocreaterole noinherit");
         admin.execute("grant connect on database \"" + POSTGRES.getDatabaseName() + "\" to tino_app");
         admin.execute("revoke create on schema public from public");
