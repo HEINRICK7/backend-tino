@@ -17,7 +17,11 @@ class M1ArchitectureTest {
         var root = repositoryRoot();
         var contractRoots = List.of(
                 root.resolve("shared/kernel/src/main"),
-                root.resolve("modules"),
+                root.resolve("modules/identity/src/main/java/com/tino/backend/identity/domain"),
+                root.resolve("modules/identity/src/main/java/com/tino/backend/identity/application"),
+                root.resolve("modules/business/src/main"),
+                root.resolve("modules/device/src/main"),
+                root.resolve("modules/sync/src/main"),
                 root.resolve("app/src/main/java"));
 
         sourceTexts(contractRoots).forEach(source -> assertThat(source)

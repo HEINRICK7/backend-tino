@@ -14,14 +14,13 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.annotation.DirtiesContext;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class ApplicationFoundationTest {
     @Container
-    static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:17-alpine");
+    static final M2PostgresTestContainer POSTGRES = new M2PostgresTestContainer();
 
     @LocalServerPort
     int port;
@@ -29,10 +28,10 @@ class ApplicationFoundationTest {
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
-        registry.add("spring.datasource.username", POSTGRES::getUsername);
-        registry.add("spring.datasource.password", POSTGRES::getPassword);
-        registry.add("spring.flyway.user", POSTGRES::getUsername);
-        registry.add("spring.flyway.password", POSTGRES::getPassword);
+        registry.add("spring.datasource.username", () -> M2PostgresTestContainer.APP);
+        registry.add("spring.datasource.password", POSTGRES::appPassword);
+        registry.add("spring.flyway.user", () -> M2PostgresTestContainer.MIGRATOR);
+        registry.add("spring.flyway.password", POSTGRES::migratorPassword);
         registry.add("spring.security.oauth2.resourceserver.jwt.issuer-uri", () -> "http://127.0.0.1:65535/realms/test");
     }
 

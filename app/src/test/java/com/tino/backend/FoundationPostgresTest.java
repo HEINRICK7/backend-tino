@@ -9,26 +9,25 @@ import org.flywaydb.core.Flyway;
 import org.jooq.SQLDialect;
 import org.jooq.impl.DSL;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
 class FoundationPostgresTest {
     @Test
     void flywayMigratesFromEmptyAndJooqWorksAgainstDisposablePostgres() {
-        try (var postgres = new PostgreSQLContainer("postgres:17-alpine")) {
+        try (var postgres = new M2PostgresTestContainer()) {
             postgres.start();
 
             var flyway = Flyway.configure()
-                    .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
+                    .dataSource(postgres.getJdbcUrl(), M2PostgresTestContainer.MIGRATOR, postgres.migratorPassword())
                     .locations("classpath:db/migration")
                     .load();
             var result = flyway.migrate();
 
             assertThat(result.success).isTrue();
-            assertThat(result.migrationsExecuted).isEqualTo(1);
+            assertThat(result.migrationsExecuted).isEqualTo(2);
             assertThatCode(flyway::validate).doesNotThrowAnyException();
 
             try (var connection = DriverManager.getConnection(
-                    postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())) {
+                    postgres.getJdbcUrl(), M2PostgresTestContainer.APP, postgres.appPassword())) {
                 var value = DSL.using(connection, SQLDialect.POSTGRES).fetchValue("select 1", Integer.class);
                 assertThat(value).isEqualTo(1);
             } catch (SQLException exception) {
