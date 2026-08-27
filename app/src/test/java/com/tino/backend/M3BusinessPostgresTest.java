@@ -87,7 +87,8 @@ class M3BusinessPostgresTest {
     void clearM3Data() throws Exception {
         migrate(POSTGRES);
         try (var connection = migratorConnection(POSTGRES); var statement = connection.createStatement()) {
-            statement.execute("TRUNCATE TABLE public.business_memberships, public.businesses, public.users");
+            statement.execute("TRUNCATE TABLE public.device_installations, "
+                    + "public.business_memberships, public.businesses, public.users");
         }
     }
 
@@ -338,8 +339,8 @@ class M3BusinessPostgresTest {
         try (var fresh = new M2PostgresTestContainer()) {
             fresh.start();
             var result = migrate(fresh).info();
-            assertThat(result.applied()).hasSize(3);
-            assertThat(result.current().getVersion().getVersion()).isEqualTo("2");
+            assertThat(result.applied()).hasSize(4);
+            assertThat(result.current().getVersion().getVersion()).isEqualTo("3");
         }
     }
 
