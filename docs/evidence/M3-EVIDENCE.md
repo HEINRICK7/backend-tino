@@ -8,8 +8,8 @@ Base develop: `36e7dcb92ed1fb085dedd0e2751f901360d1f824`
 Proposal integration ancestor: `8faeae774b1007e4d7833edb048ee7ba9d6ee7ee`
 Authorization commit: `36e7dcb92ed1fb085dedd0e2751f901360d1f824` (`docs: authorize M3 business membership`)
 Implementation commit: `4cf5db3d503b5e0f299b244e04ce3c0c98f2a40a`
-Final evidence commit: pending this documentation commit
-PR: pending push (`feature/m3-business-membership` → `develop`)
+Final evidence commit: this documentation commit (SHA reported in Git history)
+PR: `#6 <https://github.com/HEINRICK7/backend-tino/pull/6>` (`feature/m3-business-membership` → `develop`)
 M4 authorized: **NO**
 
 This evidence records the implementation and the independent review phase. It
@@ -330,8 +330,9 @@ which is necessary for the required unauthenticated POST 401 boundary and does
 not weaken JWT validation. No architecture or specification conflict was
 found. No M4 work was started.
 
-The implementation commit was created after a staged-name review and cached
-secret scan. The evidence commit and feature push/PR metadata are the next
-normal Git steps; no develop, staging, or main ref is modified by this feature.
+The implementation and evidence commits were created after staged-name reviews
+and cached secret scans. PR #6 is open against `develop`; its GitHub Actions
+gate was queued during this evidence revision and GitGuardian reported pass.
+No develop, staging, or main ref is modified by this feature.
 Both pre-existing stashes remain preserved and untouched. The generated
 `build-logic/.kotlin/` cache is ignored and has zero tracked files.
