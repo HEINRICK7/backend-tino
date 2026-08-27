@@ -5,7 +5,7 @@ Repository: `HEINRICK7/backend-tino`
 Milestone: `M1 — DATABASE FOUNDATION` (authorized)
 Branch: `sdd/m1-database-foundation`
 Base checkpoint: `72afcf3e373401a283538df75a47281d7eeb8184`
-Final revision: pending supervisor commit; this worker did not commit, push, or merge.
+Verified implementation revision: `56014c0a70a740787f88d1886c3cbe8d47e6cc34`
 M2 AUTHORIZED: **NO**
 
 ## Verdict
@@ -20,7 +20,7 @@ jOOQ: PASS
 RLS: PASS
 Tenant Leakage: PASS
 Database Privileges: PASS
-Git: PASS (working tree intentionally uncommitted for supervisor)
+Git: PASS
 Scope Leakage: NONE
 ```
 
@@ -187,6 +187,6 @@ The only DDL source excluded from that implementation scan is the explicitly tes
 1. Shared kernel tests initially lacked a matching JUnit Platform launcher under Spring Boot 4/JUnit 6; the owned build scripts now add the versionless BOM-managed launcher as test runtime wiring.
 2. PostgreSQL reports the reset custom GUC as an empty placeholder; the fixture policy's `NULLIF` and tests prove no-context fail-closed behavior.
 3. The bounded configuration correction changes only Flyway's local defaults to `tino_migrator`/`tino_migrator`; runtime datasource defaults remain `tino_app`/`tino_app`, and the two Flyway environment overrides are preserved. `M1ConfigurationTest` proves the separation.
-4. Final Git revision is intentionally pending the supervising root agent's commit. No M2 behavior was started.
+4. The verified implementation is commit `56014c0a70a740787f88d1886c3cbe8d47e6cc34`; the evidence-only follow-up revision is reported in the final milestone output. No M2 behavior was started.
 
 **M2 AUTHORIZED: NO**
