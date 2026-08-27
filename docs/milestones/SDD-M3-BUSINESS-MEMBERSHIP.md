@@ -2,7 +2,7 @@
 
 ## Status
 
-PROPOSED
+AUTHORIZED
 
 Este milestone somente poderá ser executado após autorização explícita do usuário.
 
