@@ -4,14 +4,14 @@ spring:
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/tino}
     username: ${SPRING_DATASOURCE_USERNAME:tino_app}
-    password: ${SPRING_DATASOURCE_PASSWORD:tino_app}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
     hikari:
       auto-commit: false
       connection-timeout: 5000
   flyway:
     enabled: true
     user: ${SPRING_FLYWAY_USER:tino_migrator}
-    password: ${SPRING_FLYWAY_PASSWORD:tino_migrator}
+    password: ${SPRING_FLYWAY_PASSWORD:}
   security:
     oauth2:
       resourceserver:

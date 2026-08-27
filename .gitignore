@@ -7,7 +7,7 @@ build/
 .env
 .env.*
 !.env.example
-out/
+/out/
 *.log
 logs/
 compose.override.yaml

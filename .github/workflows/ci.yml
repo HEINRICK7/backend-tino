@@ -20,6 +20,8 @@ jobs:
           java-version: "21"
           cache: gradle
       - uses: gradle/actions/setup-gradle@v4
+      - name: Scan tracked application sources for hardcoded secrets
+        run: ./scripts/secret-scan.sh
       - name: Validate Compose
         run: docker compose config --quiet
       - name: Build, tests and architecture
