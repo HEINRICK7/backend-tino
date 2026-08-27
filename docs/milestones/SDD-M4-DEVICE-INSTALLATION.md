@@ -2,7 +2,7 @@
 
 ## Status
 
-PROPOSED
+AUTHORIZED
 
 M4 não está autorizado para implementação enquanto este documento
 permanecer PROPOSED.
