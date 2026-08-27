@@ -14,6 +14,10 @@ dependencies {
     implementation(libs.flyway.postgresql)
     runtimeOnly(libs.postgresql)
     testImplementation(libs.spring.boot.starter.test)
+    testImplementation("com.zaxxer:HikariCP")
+    testImplementation(libs.testcontainers.junit)
+    testImplementation(libs.testcontainers.postgresql)
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     jooqCodegen(platform(libs.spring.boot.dependencies))
     jooqCodegen(libs.postgresql)
 }

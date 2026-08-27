@@ -10,8 +10,8 @@ spring:
       connection-timeout: 5000
   flyway:
     enabled: true
-    user: ${SPRING_FLYWAY_USER:${spring.datasource.username}}
-    password: ${SPRING_FLYWAY_PASSWORD:${spring.datasource.password}}
+    user: ${SPRING_FLYWAY_USER:tino_migrator}
+    password: ${SPRING_FLYWAY_PASSWORD:tino_migrator}
   security:
     oauth2:
       resourceserver:

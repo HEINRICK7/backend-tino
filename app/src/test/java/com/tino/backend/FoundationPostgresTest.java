@@ -1,6 +1,7 @@
 package com.tino.backend;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -12,17 +13,19 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 class FoundationPostgresTest {
     @Test
-    void flywayAndJooqWorkAgainstDisposablePostgres() {
+    void flywayMigratesFromEmptyAndJooqWorksAgainstDisposablePostgres() {
         try (var postgres = new PostgreSQLContainer("postgres:17-alpine")) {
             postgres.start();
 
-            var result = Flyway.configure()
+            var flyway = Flyway.configure()
                     .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
-                    .load()
-                    .migrate();
+                    .locations("classpath:db/migration")
+                    .load();
+            var result = flyway.migrate();
 
             assertThat(result.success).isTrue();
             assertThat(result.migrationsExecuted).isEqualTo(1);
+            assertThatCode(flyway::validate).doesNotThrowAnyException();
 
             try (var connection = DriverManager.getConnection(
                     postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())) {
