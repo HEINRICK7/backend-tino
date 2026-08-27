@@ -200,25 +200,32 @@ GitGuardian reported four `Generic Password` findings introduced by the verified
 
 No externally valid credential or reuse path was found, so rotation is not required. The historical incident remains classifiable in GitGuardian as a revoked/non-valid dev/test credential; it must not be represented as a real secret false positive. The already-merged history was deliberately not rewritten and `main` was not force-pushed.
 
-Remediation implementation revision: `3c00250e6323d37e32ca98e645bb0da647044561`.
+Initial remediation revision: `3c00250e6323d37e32ca98e645bb0da647044561`.
+Mandatory policy enforcement revision: `6d803fca6cbb3666fbd331ff8187ff4c8b27a33e`.
 
 Current-state corrections and prevention:
 
-- datasource and Flyway passwords now have empty environment-variable defaults and must be supplied at runtime;
+- datasource, Flyway and jOOQ passwords have no committed credential fallback and must be supplied at runtime;
 - the real-PostgreSQL fixture generates an in-memory UUID credential and persists no credential literal;
 - the configuration test continues proving separate runtime/migration users and now proves the absence of password defaults;
-- `scripts/secret-scan.sh` scans tracked application sources, runs in CI, and is available through the tracked pre-commit hook;
+- Compose credentials are generated into an ignored mode-`600` `.env`; the PostgreSQL bootstrap consumes runtime variables without embedding their values in SQL;
+- `scripts/secret-scan.sh` covers tracked operational files, high-confidence credential formats across all tracked files, sensitive filenames, and committed build artifacts;
+- the scan runs independently in pre-commit, pre-push, and CI;
+- `docs/security/SECURITY-GIT-SAFETY-POLICY.md` is mandatory, precedes the architecture baseline in the document hierarchy, and is required by `EXECUTION-PROTOCOL.md`;
 - `.gitignore` now ignores only the root `/out/` build directory, ensuring Java `adapter/out` packages remain visible to Git and security scans.
 
 Remediation verification:
 
 - focused M1 configuration, Flyway/PostgreSQL, architecture, UUID v7, tenant/RLS, rollback/commit reset, and one-connection pool-leakage tests — **PASS**, `BUILD SUCCESSFUL in 34s`;
-- `./gradlew clean build architecture migrations --rerun-tasks --no-daemon --console=plain` — **PASS**, `BUILD SUCCESSFUL in 57s`, 38 tasks executed;
-- jOOQ code generation against healthy disposable PostgreSQL 17 on isolated port `55432` — **PASS**, `BUILD SUCCESSFUL in 9s`;
+- final `./gradlew clean build architecture migrations --rerun-tasks --no-daemon --console=plain` with runtime-generated environment — **PASS**, `BUILD SUCCESSFUL in 1m 25s`, 38 tasks executed;
+- fresh isolated Compose project: PostgreSQL healthy, Keycloak realm discovery HTTP 200, both database-role logins valid, and both roles remain `NOSUPERUSER`/`NOBYPASSRLS` — **PASS**;
+- jOOQ code generation against that fresh PostgreSQL 17 on isolated port `55432` — **PASS**, `BUILD SUCCESSFUL in 31s`;
 - runtime dependency audit for prohibited ORM/Redis/Kafka/RabbitMQ dependencies — **PASS**, none found;
-- local tracked-source secret scan, empty-password-default scan, staged pre-commit scan, and `git diff --check` — **PASS**;
-- Compose validation database was stopped and removed after verification.
+- full tracked-file secret scan, password-default/SQL-literal scans, staged pre-commit scan, shell syntax validation, unexpected-file audit, and `git diff --check` — **PASS**;
+- the preexisting local Compose volume was not modified or deleted; the validation project and its purpose-created volume were stopped and removed after verification.
 
-GitGuardian historical incident classification/resolution remains pending repository-owner action in the GitGuardian UI; no scanner incident was dismissed merely to make a gate green.
+The first jOOQ attempt targeted the preserved pre-policy Compose volume and correctly failed external password authentication because an already-initialized PostgreSQL volume does not rerun bootstrap scripts. The agent did not delete or mutate that volume. A fresh, separately named validation project objectively proved the new runtime-generated bootstrap and jOOQ path.
+
+GitGuardian historical incident classification/resolution and the CI run for the remediation PR remain pending repository-owner action. No scanner incident was dismissed merely to make a gate green, and this branch must not be recommended for merge until the remote security gate passes.
 
 **M2 AUTHORIZED: NO**
