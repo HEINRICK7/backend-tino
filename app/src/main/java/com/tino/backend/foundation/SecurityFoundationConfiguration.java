@@ -33,6 +33,7 @@ public class SecurityFoundationConfiguration {
                         .permitAll()
                         .anyRequest()
                         .authenticated())
+                .csrf(csrf -> csrf.disable())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt
                         .jwtAuthenticationConverter(jwtAuthenticationConverter)))
                 .build();

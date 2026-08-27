@@ -116,10 +116,12 @@ class M2ArchitecturePrivacyScopeTest {
 
     private static Stream<Path> files(Path root) throws IOException {
         if (!Files.exists(root)) {
-            return Stream.empty();
+                return Stream.empty();
         }
         return Files.walk(root)
                 .filter(Files::isRegularFile)
+                // Spring Modulith package metadata is boundary configuration, not a domain/application dependency.
+                .filter(path -> !path.getFileName().toString().equals("package-info.java"))
                 .filter(path -> {
                     var name = path.getFileName().toString();
                     return name.endsWith(".java") || name.endsWith(".sql");
