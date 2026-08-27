@@ -50,7 +50,7 @@ The versions were read from `java -version`, `./gradlew --version`, Docker image
 - `shared/kernel/src/test/java/com/tino/backend/shared/kernel/UuidV7GeneratorTest.java` — UUID v7 validity, variant, uniqueness, and ordering proof.
 - `app/src/test/java/com/tino/backend/FoundationPostgresTest.java` — empty-database Flyway migration count/validate and real PostgreSQL jOOQ proof.
 - `app/src/test/java/com/tino/backend/M1ArchitectureTest.java` — source/runtime boundary proof for jOOQ and forbidden ORM persistence.
-- `app/src/main/resources/application.yml` and `app/src/test/java/com/tino/backend/M1ConfigurationTest.java` — explicit `tino_migrator` Flyway defaults with environment overrides, while runtime datasource defaults remain `tino_app`, plus focused configuration proof.
+- `app/src/main/resources/application.yml` and `app/src/test/java/com/tino/backend/M1ConfigurationTest.java` — separate default usernames for Flyway and the runtime datasource, mandatory runtime password configuration, and focused configuration proof.
 - `shared/kernel/build.gradle.kts` and `shared/infrastructure/build.gradle.kts` — M1 test wiring, aligned JUnit Platform launcher, Testcontainers, and test-only Hikari dependency.
 
 No migration, domain module source, Compose file, Keycloak file, or `docker/postgres/init.sql` changed. Existing `V0__foundation.sql` remains immutable and contains only `SELECT 1`.
@@ -107,7 +107,7 @@ The `true` flag is transaction-local. The test uses a `TransactionAwareDataSourc
 | 014 | 1,000 UUIDs: version `7`, variant `2`, unique, sorted | PASS |
 | 015 | Source/runtime audit has no hibernate-core, Spring Data JPA, Jakarta Persistence, or ORM | PASS |
 
-Additional M1 configuration proof: `M1ConfigurationTest.keepsRuntimeAndFlywayDatabaseIdentitiesSeparateByDefault` verifies datasource defaults remain `tino_app` while Flyway defaults are explicitly `tino_migrator`, and both `SPRING_FLYWAY_USER`/`SPRING_FLYWAY_PASSWORD` overrides remain present; **PASS**.
+Additional M1 configuration proof: `M1ConfigurationTest.keepsRuntimeAndFlywayDatabaseIdentitiesSeparateWithoutPasswordDefaults` verifies datasource and Flyway usernames remain separate while both password settings require environment/runtime values; **PASS**.
 
 Exact test commands and outcomes:
 
@@ -135,7 +135,7 @@ Exact test commands and outcomes:
 # BUILD SUCCESSFUL; root migration task and app PostgreSQL test passed
 
 TINO_POSTGRES_PORT=55432 docker compose up -d postgres
-JOOQ_JDBC_URL=jdbc:postgresql://127.0.0.1:55432/tino JOOQ_JDBC_USER=tino_migrator JOOQ_JDBC_PASSWORD=tino_migrator ./gradlew :shared:infrastructure:jooqCodegen --rerun-tasks --no-daemon --console=plain
+JOOQ_JDBC_URL=jdbc:postgresql://127.0.0.1:55432/tino JOOQ_JDBC_USER=tino_migrator JOOQ_JDBC_PASSWORD='<runtime-local-value>' ./gradlew :shared:infrastructure:jooqCodegen --rerun-tasks --no-daemon --console=plain
 TINO_POSTGRES_PORT=55432 docker compose down
 # BUILD SUCCESSFUL; jOOQ codegen completed against PostgreSQL 17
 
@@ -186,7 +186,39 @@ The only DDL source excluded from that implementation scan is the explicitly tes
 
 1. Shared kernel tests initially lacked a matching JUnit Platform launcher under Spring Boot 4/JUnit 6; the owned build scripts now add the versionless BOM-managed launcher as test runtime wiring.
 2. PostgreSQL reports the reset custom GUC as an empty placeholder; the fixture policy's `NULLIF` and tests prove no-context fail-closed behavior.
-3. The bounded configuration correction changes only Flyway's local defaults to `tino_migrator`/`tino_migrator`; runtime datasource defaults remain `tino_app`/`tino_app`, and the two Flyway environment overrides are preserved. `M1ConfigurationTest` proves the separation.
+3. The bounded configuration correction preserves the separate Flyway/runtime usernames while requiring both passwords from runtime configuration. `M1ConfigurationTest` proves the identity separation and absence of committed password defaults.
 4. The verified implementation is commit `56014c0a70a740787f88d1886c3cbe8d47e6cc34`; the evidence-only follow-up revision is reported in the final milestone output. No M2 behavior was started.
+
+## Security remediation — GitGuardian PR #1
+
+GitGuardian reported four `Generic Password` findings introduced by the verified M1 implementation revision: two configuration-test matches, one application configuration match, and one PostgreSQL test-fixture match. Classification is **DEV/TEST ONLY**:
+
+- the application matches were local defaults for the two documented Compose roles, not production credentials;
+- the PostgreSQL test match was created at test runtime and used only inside a disposable Testcontainers database;
+- repository configuration contains no VPS, external PostgreSQL, external Keycloak, or other external-system use for these values;
+- `M0-EVIDENCE.md` already records that committed Compose credentials are disposable local-development values and that production credentials are runtime-only.
+
+No externally valid credential or reuse path was found, so rotation is not required. The historical incident remains classifiable in GitGuardian as a revoked/non-valid dev/test credential; it must not be represented as a real secret false positive. The already-merged history was deliberately not rewritten and `main` was not force-pushed.
+
+Remediation implementation revision: `3c00250e6323d37e32ca98e645bb0da647044561`.
+
+Current-state corrections and prevention:
+
+- datasource and Flyway passwords now have empty environment-variable defaults and must be supplied at runtime;
+- the real-PostgreSQL fixture generates an in-memory UUID credential and persists no credential literal;
+- the configuration test continues proving separate runtime/migration users and now proves the absence of password defaults;
+- `scripts/secret-scan.sh` scans tracked application sources, runs in CI, and is available through the tracked pre-commit hook;
+- `.gitignore` now ignores only the root `/out/` build directory, ensuring Java `adapter/out` packages remain visible to Git and security scans.
+
+Remediation verification:
+
+- focused M1 configuration, Flyway/PostgreSQL, architecture, UUID v7, tenant/RLS, rollback/commit reset, and one-connection pool-leakage tests — **PASS**, `BUILD SUCCESSFUL in 34s`;
+- `./gradlew clean build architecture migrations --rerun-tasks --no-daemon --console=plain` — **PASS**, `BUILD SUCCESSFUL in 57s`, 38 tasks executed;
+- jOOQ code generation against healthy disposable PostgreSQL 17 on isolated port `55432` — **PASS**, `BUILD SUCCESSFUL in 9s`;
+- runtime dependency audit for prohibited ORM/Redis/Kafka/RabbitMQ dependencies — **PASS**, none found;
+- local tracked-source secret scan, empty-password-default scan, staged pre-commit scan, and `git diff --check` — **PASS**;
+- Compose validation database was stopped and removed after verification.
+
+GitGuardian historical incident classification/resolution remains pending repository-owner action in the GitGuardian UI; no scanner incident was dismissed merely to make a gate green.
 
 **M2 AUTHORIZED: NO**
