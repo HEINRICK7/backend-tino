@@ -21,6 +21,10 @@ spring:
     property-naming-strategy: SNAKE_CASE
     deserialization:
       fail-on-unknown-properties: true
+tino:
+  security:
+    oidc:
+      client-id: ${TINO_SECURITY_OIDC_CLIENT_ID:tino-android}
 server:
   shutdown: graceful
   error:
