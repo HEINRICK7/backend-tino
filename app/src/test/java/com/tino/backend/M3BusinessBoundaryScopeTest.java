@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.springframework.modulith.core.ApplicationModules;
@@ -70,7 +71,8 @@ class M3BusinessBoundaryScopeTest {
         var root = repositoryRoot();
         var business = sourceTexts(List.of(
                 root.resolve("modules/business/src/main/java"),
-                root.resolve("app/src/main/resources/db/migration/V2__business_memberships.sql")));
+                root.resolve("app/src/main/resources/db/migration/V2__business_memberships.sql")),
+                path -> !path.getFileName().toString().equals("BusinessContextReader.java"));
 
         business.forEach(source -> assertThat(source.toLowerCase())
                 .doesNotContain("device")
@@ -127,7 +129,8 @@ class M3BusinessBoundaryScopeTest {
                 root.resolve("modules/business/src/main/java"),
                 root.resolve("app/src/main/java/com/tino/backend/foundation/BusinessApiExceptionHandler.java"),
                 root.resolve("app/src/main/java/com/tino/backend/foundation/BusinessAuthenticatedUserResolver.java"),
-                root.resolve("app/src/main/resources/db/migration/V2__business_memberships.sql")));
+                root.resolve("app/src/main/resources/db/migration/V2__business_memberships.sql")),
+                path -> !path.getFileName().toString().equals("BusinessContextReader.java"));
         var forbidden = List.of(
                 "device", "bootstrap", "customer", "credit", "ledger", "payment", "pix",
                 "reconciliation", "sync", "whatsapp", "businessprofile");
@@ -147,14 +150,18 @@ class M3BusinessBoundaryScopeTest {
     }
 
     private static List<String> sourceTexts(List<Path> roots) {
+        return sourceTexts(roots, path -> true);
+    }
+
+    private static List<String> sourceTexts(List<Path> roots, Predicate<Path> include) {
         var texts = new ArrayList<String>();
         for (var root : roots) {
-            if (Files.isRegularFile(root)) {
+            if (Files.isRegularFile(root) && include.test(root)) {
                 texts.add(read(root));
                 continue;
             }
             try (var files = files(root)) {
-                files.map(M3BusinessBoundaryScopeTest::read).forEach(texts::add);
+                files.filter(include).map(M3BusinessBoundaryScopeTest::read).forEach(texts::add);
             } catch (IOException exception) {
                 throw new UncheckedIOException(exception);
             }

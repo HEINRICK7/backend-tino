@@ -3,7 +3,11 @@ package com.tino.backend.business;
 import com.tino.backend.business.application.exception.BusinessAccessDeniedException;
 import com.tino.backend.business.application.port.in.BusinessAuthorization;
 import com.tino.backend.business.application.port.in.BusinessAuthorizationDeniedException;
+import com.tino.backend.business.application.port.in.BusinessContextReader;
+import com.tino.backend.business.application.port.in.BusinessContextUnavailableException;
+import com.tino.backend.business.application.port.in.AccessibleBusinessView;
 import com.tino.backend.business.application.port.out.BusinessMembershipRepository;
+import com.tino.backend.business.application.port.out.BusinessPersistenceException;
 import com.tino.backend.business.application.port.out.BusinessRepository;
 import com.tino.backend.business.application.usecase.CreateBusiness;
 import com.tino.backend.business.application.usecase.ExecuteAuthorizedBusinessOperation;
@@ -37,6 +41,19 @@ public class BusinessConfiguration {
     }
 
     @Bean
+    BusinessContextReader businessContextReader(ListUserBusinesses listUserBusinesses) {
+        return userId -> {
+            try {
+                return listUserBusinesses.execute(new UserId(userId)).stream()
+                        .map(BusinessConfiguration::toPublicView)
+                        .toList();
+            } catch (BusinessPersistenceException exception) {
+                throw new BusinessContextUnavailableException(exception);
+            }
+        };
+    }
+
+    @Bean
     ExecuteAuthorizedBusinessOperation executeAuthorizedBusinessOperation(
             ResolveBusinessAccess access, TenantContextExecutor tenantContext) {
         return new ExecuteAuthorizedBusinessOperation(access, tenantContext);
@@ -59,5 +76,16 @@ public class BusinessConfiguration {
                 }
             }
         };
+    }
+
+    private static AccessibleBusinessView toPublicView(
+            com.tino.backend.business.application.model.AccessibleBusiness accessible) {
+        var business = accessible.business();
+        return new AccessibleBusinessView(
+                business.id().value(),
+                business.tradeName().value(),
+                business.vertical().name(),
+                business.status().name(),
+                accessible.role().name());
     }
 }

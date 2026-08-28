@@ -1,6 +1,6 @@
 # TINO Backend
 
-Production-grade foundation for the TINO Android synchronization backend.
+Production-grade modular monolith for the TINO Android synchronization backend.
 
 ## Prerequisites
 
@@ -13,7 +13,11 @@ Production-grade foundation for the TINO Android synchronization backend.
 ./gradlew clean build architecture migrations
 ```
 
-M0 integration tests use Testcontainers and execute the technical Flyway migration and jOOQ connection against real PostgreSQL. Domain tables and RLS belong to M1 and are intentionally absent.
+The verification suite uses Testcontainers and real PostgreSQL for Flyway,
+jOOQ, identity, membership, device installation, RLS, and Bootstrap Context
+flows. The current schema contains `users`, `businesses`,
+`business_memberships`, and `device_installations`; Bootstrap is read-only and
+does not add a functional migration.
 
 ## Local runtime
 
@@ -44,3 +48,7 @@ The hooks invoke the scan before commit and again before push; CI independently 
 Set `SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI` to the Keycloak realm URL. Health and OpenAPI are public foundation surfaces; every other route is authenticated by default.
 
 Swagger UI is available at `/swagger-ui.html`; liveness/readiness endpoints are below `/actuator/health`.
+
+The current functional entry point is `POST /api/v1/bootstrap`, which returns
+the initial authenticated user/business/installation state without performing
+sync or other domain operations.

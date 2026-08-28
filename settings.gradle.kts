@@ -19,6 +19,7 @@ include(
     "modules:identity",
     "modules:business",
     "modules:device",
+    "modules:bootstrap",
     "modules:sync",
     "shared:kernel",
     "shared:infrastructure",
