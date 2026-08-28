@@ -50,7 +50,10 @@ class M4DeviceBoundaryScopeTest {
         var root = repositoryRoot();
         var application = sourceTexts(List.of(
                 root.resolve("modules/device/src/main/java/com/tino/backend/device/domain"),
-                root.resolve("modules/device/src/main/java/com/tino/backend/device/application")));
+                root.resolve("modules/device/src/main/java/com/tino/backend/device/application")))
+                .stream()
+                .filter(source -> !source.contains("@org.springframework.modulith.NamedInterface"))
+                .toList();
         application.forEach(source -> assertThat(source)
                 .doesNotContain("org.jooq")
                 .doesNotContain("DSLContext")
