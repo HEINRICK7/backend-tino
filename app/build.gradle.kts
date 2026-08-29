@@ -15,6 +15,7 @@ dependencies {
     implementation(project(":modules:customer"))
     implementation(project(":modules:credit"))
     implementation(project(":modules:payment"))
+    implementation(project(":modules:reconciliation"))
 
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.validation)

@@ -24,6 +24,7 @@ include(
     "modules:customer",
     "modules:credit",
     "modules:payment",
+    "modules:reconciliation",
     "shared:kernel",
     "shared:infrastructure",
 )

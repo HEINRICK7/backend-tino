@@ -10,6 +10,7 @@ import java.util.UUID;
 public interface PaymentRepository {
     boolean customerExists(BusinessId businessId, UUID customerId);
     Optional<Payment> find(BusinessId businessId, UUID paymentId);
+    Optional<Payment> findByProviderPaymentId(BusinessId businessId, String provider, String providerPaymentId);
     Optional<IdempotencyRecord> findIdempotency(BusinessId businessId, String key);
     boolean claimIdempotency(BusinessId businessId, String key, String fingerprint,
             UUID paymentId, Instant createdAt);

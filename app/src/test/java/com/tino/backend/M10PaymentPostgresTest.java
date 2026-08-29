@@ -64,7 +64,7 @@ class M10PaymentPostgresTest {
         org.flywaydb.core.Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), M2PostgresTestContainer.MIGRATOR,
                 POSTGRES.migratorPassword()).locations("classpath:db/migration").load().migrate();
         try (var connection = adminConnection(); var statement = connection.createStatement()) {
-            statement.execute("TRUNCATE TABLE public.payment_provider_events, public.payment_outbox, "
+            statement.execute("TRUNCATE TABLE public.reconciliation_items, public.reconciliation_runs, public.payment_provider_events, public.payment_outbox, "
                     + "public.payment_idempotency_keys, public.payments, public.credit_audit_records, "
                     + "public.credit_idempotency_keys, public.credit_ledger_entries, public.credit_accounts, "
                     + "public.customer_idempotency_keys, public.customers, public.sync_event_rejections, "

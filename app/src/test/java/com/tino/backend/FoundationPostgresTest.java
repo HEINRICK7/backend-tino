@@ -23,7 +23,7 @@ class FoundationPostgresTest {
             var result = flyway.migrate();
 
             assertThat(result.success).isTrue();
-            assertThat(result.migrationsExecuted).isEqualTo(8);
+            assertThat(result.migrationsExecuted).isEqualTo(9);
             assertThatCode(flyway::validate).doesNotThrowAnyException();
 
             try (var connection = DriverManager.getConnection(
