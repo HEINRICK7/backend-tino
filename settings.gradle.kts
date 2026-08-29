@@ -22,6 +22,7 @@ include(
     "modules:bootstrap",
     "modules:sync",
     "modules:customer",
+    "modules:credit",
     "shared:kernel",
     "shared:infrastructure",
 )

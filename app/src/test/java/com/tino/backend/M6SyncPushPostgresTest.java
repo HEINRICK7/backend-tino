@@ -63,7 +63,8 @@ class M6SyncPushPostgresTest {
     void migrateAndSeed() throws Exception {
         migrate();
         try (var connection = migratorConnection(); var statement = connection.createStatement()) {
-            statement.execute("TRUNCATE TABLE public.customer_idempotency_keys, public.customers, "
+            statement.execute("TRUNCATE TABLE public.credit_audit_records, public.credit_idempotency_keys, "
+                    + "public.credit_ledger_entries, public.credit_accounts, public.customer_idempotency_keys, public.customers, "
                     + "public.sync_event_rejections, public.sync_outbox, "
                     + "public.sync_changes, public.sync_event_claims, public.device_installations, "
                     + "public.business_memberships, public.businesses, public.users");
