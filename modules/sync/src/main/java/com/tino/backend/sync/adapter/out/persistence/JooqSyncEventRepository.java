@@ -3,6 +3,9 @@ package com.tino.backend.sync.adapter.out.persistence;
 import com.tino.backend.shared.kernel.BusinessId;
 import com.tino.backend.sync.application.exception.SyncPersistenceException;
 import com.tino.backend.sync.application.port.out.SyncEventRepository;
+import com.tino.backend.sync.application.port.out.SyncChangeRepository;
+import com.tino.backend.sync.application.model.SyncChange;
+import com.tino.backend.sync.application.model.SyncChangePage;
 import com.tino.backend.sync.domain.model.SyncEvent;
 import com.tino.backend.sync.domain.model.SyncEventEffects;
 import java.time.Instant;
@@ -18,7 +21,7 @@ import org.springframework.stereotype.Repository;
 
 /** jOOQ-only persistence adapter for the atomic M6 event write set. */
 @Repository
-public class JooqSyncEventRepository implements SyncEventRepository {
+public class JooqSyncEventRepository implements SyncEventRepository, SyncChangeRepository {
     private static final Table<?> CLAIMS = table("sync_event_claims");
     private static final Table<?> CHANGES = table("sync_changes");
     private static final Table<?> OUTBOX = table("sync_outbox");
@@ -27,6 +30,7 @@ public class JooqSyncEventRepository implements SyncEventRepository {
     private static final Field<UUID> EVENT_ID = field("event_id", UUID.class);
     private static final Field<UUID> ID = field("id", UUID.class);
     private static final Field<UUID> OUTBOX_ID = field("id", UUID.class);
+    private static final Field<Long> SEQUENCE_ID = field("sequence_id", Long.class);
     private static final Field<String> STORE_ID = field("store_id", String.class);
     private static final Field<String> DEVICE_ID = field("device_id", String.class);
     private static final Field<String> AGGREGATE_ID = field("aggregate_id", String.class);
@@ -105,6 +109,28 @@ public class JooqSyncEventRepository implements SyncEventRepository {
                     .values(rejectionId, businessId.value(), eventId, deviceId, code, retryable,
                             message, databaseTime(createdAt))
                     .execute();
+        } catch (RuntimeException exception) {
+            throw new SyncPersistenceException(exception);
+        }
+    }
+
+    @Override
+    public SyncChangePage findAfter(BusinessId businessId, long cursor, int limit) {
+        try {
+            var records = dsl.select(SEQUENCE_ID, EVENT_ID, STORE_ID, DEVICE_ID,
+                            AGGREGATE_ID, EVENT_TYPE, SCHEMA_VERSION, OCCURRED_AT, PAYLOAD)
+                    .from(CHANGES)
+                    .where(BUSINESS_ID.eq(businessId.value()))
+                    .and(SEQUENCE_ID.gt(cursor))
+                    .orderBy(SEQUENCE_ID.asc())
+                    .limit(limit)
+                    .fetch();
+            var changes = records.map(record -> new SyncChange(
+                    record.get(EVENT_ID), record.get(STORE_ID), record.get(DEVICE_ID),
+                    record.get(AGGREGATE_ID), record.get(EVENT_TYPE), record.get(SCHEMA_VERSION),
+                    record.get(OCCURRED_AT).toInstant(), record.get(PAYLOAD).data()));
+            var nextCursor = changes.isEmpty() ? cursor : records.getLast().get(SEQUENCE_ID);
+            return new SyncChangePage(changes, nextCursor);
         } catch (RuntimeException exception) {
             throw new SyncPersistenceException(exception);
         }

@@ -6,7 +6,9 @@ import com.tino.backend.device.application.port.in.DeviceInstallationContextRead
 import com.tino.backend.shared.kernel.UuidGenerator;
 import com.tino.backend.sync.application.port.in.SyncEventHandler;
 import com.tino.backend.sync.application.port.out.SyncEventRepository;
+import com.tino.backend.sync.application.port.out.SyncChangeRepository;
 import com.tino.backend.sync.application.usecase.ProcessSyncEvents;
+import com.tino.backend.sync.application.usecase.PullSyncChanges;
 import com.tino.backend.sync.application.usecase.SyncEventHandlerRegistry;
 import java.time.Clock;
 import java.util.List;
@@ -32,5 +34,13 @@ public class SyncConfiguration {
             Clock clock) {
         return new ProcessSyncEvents(
                 businesses, businessAuthorization, devices, events, handlers, ids, clock);
+    }
+
+    @Bean
+    PullSyncChanges pullSyncChanges(
+            BusinessContextReader businesses,
+            BusinessAuthorization businessAuthorization,
+            SyncChangeRepository changes) {
+        return new PullSyncChanges(businesses, businessAuthorization, changes);
     }
 }
