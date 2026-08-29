@@ -92,7 +92,8 @@ class M2ArchitecturePrivacyScopeTest {
         var production = sourceTexts(List.of(
                 root.resolve("modules/identity/src/main"),
                 root.resolve("app/src/main/java"),
-                root.resolve("app/src/main/resources/db/migration")));
+                root.resolve("app/src/main/resources/db/migration/V0__foundation.sql"),
+                root.resolve("app/src/main/resources/db/migration/V1__identity_users.sql")));
         var forbidden = List.of(
                 "businessmembership", "businessrole", "device registration", "bootstrap",
                 "customer", "credit", "ledger", "payment", "pix", "reconciliation", "sync event",

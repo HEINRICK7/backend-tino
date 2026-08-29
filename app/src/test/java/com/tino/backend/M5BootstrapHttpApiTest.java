@@ -99,7 +99,8 @@ class M5BootstrapHttpApiTest {
                 POSTGRES.getJdbcUrl(), M2PostgresTestContainer.MIGRATOR,
                 POSTGRES.migratorPassword());
                 var statement = connection.createStatement()) {
-            statement.execute("TRUNCATE TABLE public.sync_event_rejections, public.sync_outbox, "
+            statement.execute("TRUNCATE TABLE public.customer_idempotency_keys, public.customers, "
+                    + "public.sync_event_rejections, public.sync_outbox, "
                     + "public.sync_changes, public.sync_event_claims, public.device_installations, "
                     + "public.business_memberships, public.businesses, public.users");
         }

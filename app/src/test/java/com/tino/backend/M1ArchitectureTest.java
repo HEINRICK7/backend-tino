@@ -25,6 +25,8 @@ class M1ArchitectureTest {
                 root.resolve("modules/device/src/main/java/com/tino/backend/device/application"),
                 root.resolve("modules/sync/src/main/java/com/tino/backend/sync/domain"),
                 root.resolve("modules/sync/src/main/java/com/tino/backend/sync/application"),
+                root.resolve("modules/customer/src/main/java/com/tino/backend/customer/domain"),
+                root.resolve("modules/customer/src/main/java/com/tino/backend/customer/application"),
                 root.resolve("app/src/main/java"));
 
         sourceTexts(contractRoots).forEach(source -> assertThat(source)
@@ -38,6 +40,9 @@ class M1ArchitectureTest {
                 .forEach(source -> assertThat(source).contains("org.jooq").contains("DSLContext"));
         sourceTexts(List.of(root.resolve(
                 "modules/sync/src/main/java/com/tino/backend/sync/adapter/out/persistence")))
+                .forEach(source -> assertThat(source).contains("org.jooq").contains("DSLContext"));
+        sourceTexts(List.of(root.resolve(
+                "modules/customer/src/main/java/com/tino/backend/customer/adapter/out/persistence")))
                 .forEach(source -> assertThat(source).contains("org.jooq").contains("DSLContext"));
     }
 
