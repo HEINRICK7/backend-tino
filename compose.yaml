@@ -23,9 +23,40 @@ services:
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${TINO_KEYCLOAK_ADMIN_PASSWORD:?Run ./scripts/create-local-env.sh}
+      KC_HOSTNAME: http://localhost:${TINO_KEYCLOAK_PORT:-8081}
+      KC_HOSTNAME_STRICT: "false"
     ports: ["${TINO_KEYCLOAK_PORT:-8081}:8080"]
     volumes:
       - ./docker/keycloak/tino-realm.json:/opt/keycloak/data/import/tino-realm.json:ro
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/tino
+      SPRING_DATASOURCE_USERNAME: tino_app
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:?Run ./scripts/create-local-env.sh}
+      SPRING_FLYWAY_USER: tino_migrator
+      SPRING_FLYWAY_PASSWORD: ${SPRING_FLYWAY_PASSWORD:?Run ./scripts/create-local-env.sh}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://localhost:${TINO_KEYCLOAK_PORT:-8081}/realms/tino
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8080/realms/tino/protocol/openid-connect/certs
+      TINO_SECURITY_OIDC_CLIENT_ID: tino-android
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
+    ports: ["${TINO_APP_PORT:-8080}:8080"]
+    restart: unless-stopped
 
 volumes:
   tino-postgres:

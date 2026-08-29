@@ -26,12 +26,11 @@ does not add a functional migration.
 set -a
 . ./.env
 set +a
-docker compose up -d
-./gradlew :app:bootRun
+docker compose up --build
 ```
 
-Compose runs only PostgreSQL and Keycloak. During development the Spring Boot application runs directly through Gradle for a shorter feedback loop.
-If the default ports are occupied, use `TINO_POSTGRES_PORT=55432 TINO_KEYCLOAK_PORT=58081 docker compose up -d` and point the application environment at those ports.
+Compose starts the Spring Boot application, PostgreSQL, and Keycloak in separate containers. For a shorter feedback loop, the application can still run directly through Gradle after starting only the infrastructure services with `docker compose up -d postgres keycloak`.
+If the default ports are occupied, use `TINO_APP_PORT=58080 TINO_POSTGRES_PORT=55432 TINO_KEYCLOAK_PORT=58081 docker compose up --build`.
 
 `scripts/create-local-env.sh` generates local credentials at runtime into the ignored, mode-`600` `.env` file and refuses to overwrite an existing file. Compose reads it automatically; exporting it as shown also supplies Spring Boot and jOOQ. No password has a committed default. Production credentials and private keys must come from the platform secret store and must never be committed.
 
@@ -47,7 +46,7 @@ The hooks invoke the scan before commit and again before push; CI independently 
 
 Set `SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI` to the Keycloak realm URL. Health and OpenAPI are public foundation surfaces; every other route is authenticated by default.
 
-Swagger UI is available at `/swagger-ui.html`; liveness/readiness endpoints are below `/actuator/health`.
+Swagger UI is available at `http://localhost:8080/swagger-ui.html`; liveness/readiness endpoints are below `/actuator/health`.
 
 The current functional entry point is `POST /api/v1/bootstrap`, which returns
 the initial authenticated user/business/installation state without performing
