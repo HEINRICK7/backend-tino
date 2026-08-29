@@ -12,6 +12,7 @@ dependencies {
     implementation(project(":modules:device"))
     implementation(project(":modules:bootstrap"))
     implementation(project(":modules:sync"))
+    implementation(project(":modules:customer"))
 
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.validation)

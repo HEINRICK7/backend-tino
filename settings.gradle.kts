@@ -21,6 +21,7 @@ include(
     "modules:device",
     "modules:bootstrap",
     "modules:sync",
+    "modules:customer",
     "shared:kernel",
     "shared:infrastructure",
 )
