@@ -1,6 +1,6 @@
 # SDD-M6 — Sync Push
 
-Status: **DRAFT — NOT AUTHORIZED**
+Status: **AUTHORIZED BY PROJECT OWNER**
 
 ## GOAL
 Accept Android event batches with tenant-safe, transactional, idempotent processing.

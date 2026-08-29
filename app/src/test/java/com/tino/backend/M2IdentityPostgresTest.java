@@ -45,7 +45,9 @@ class M2IdentityPostgresTest {
     void clearUsers() throws Exception {
         try (var connection = migratorConnection(); var statement = connection.createStatement()) {
             statement.execute(
-                    "TRUNCATE TABLE public.device_installations, public.business_memberships, "
+                    "TRUNCATE TABLE public.sync_event_rejections, public.sync_outbox, "
+                            + "public.sync_changes, public.sync_event_claims, "
+                            + "public.device_installations, public.business_memberships, "
                             + "public.businesses, public.users");
         }
     }
@@ -54,7 +56,7 @@ class M2IdentityPostgresTest {
     void migratesFromZeroAndFlywayValidatePasses() {
         var flyway = migrate();
 
-        assertThat(flyway.info().applied()).hasSize(4);
+        assertThat(flyway.info().applied()).hasSize(5);
         flyway.validate();
         assertThat(tableColumns()).containsExactly(
                 "id", "external_subject", "status", "created_at", "updated_at");
