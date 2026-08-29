@@ -1,5 +1,6 @@
 package com.tino.backend.business.adapter.in.web;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.tino.backend.business.application.model.AccessibleBusiness;
 import com.tino.backend.business.application.model.AuthenticatedUser;
 import com.tino.backend.business.application.model.CreatedBusiness;
@@ -90,7 +91,7 @@ public final class BusinessController {
     }
 
     public record CreateBusinessRequest(
-            @NotBlank String tradeName,
+            @JsonProperty("trade_name") @NotBlank String tradeName,
             @NotBlank String vertical) {}
 
     public record BusinessResponse(
