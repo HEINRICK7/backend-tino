@@ -10,7 +10,11 @@ import com.tino.backend.sync.application.model.SyncPushResult;
 import com.tino.backend.sync.application.exception.SyncUnavailableException;
 import com.tino.backend.sync.application.exception.SyncAccessDeniedException;
 import com.tino.backend.sync.application.exception.UnauthenticatedSyncRequestException;
+import com.tino.backend.sync.application.exception.SyncBusinessContextRequiredException;
+import com.tino.backend.sync.application.model.SyncChange;
+import com.tino.backend.sync.application.model.SyncChangePage;
 import com.tino.backend.sync.application.usecase.ProcessSyncEvents;
+import com.tino.backend.sync.application.usecase.PullSyncChanges;
 import com.tino.backend.sync.domain.model.SyncEvent;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -18,25 +22,34 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import tools.jackson.databind.ObjectMapper;
 
 /** Thin compatibility adapter for the Android Sync Push contract. */
 @RestController
-@RequestMapping("/v1/sync/events")
+@RequestMapping("/v1/sync")
 public final class SyncController {
     private final AuthenticatedUserResolver authenticatedUsers;
     private final ProcessSyncEvents processSyncEvents;
+    private final PullSyncChanges pullSyncChanges;
+    private final ObjectMapper objectMapper;
     public SyncController(
             AuthenticatedUserResolver authenticatedUsers,
-            ProcessSyncEvents processSyncEvents) {
+            ProcessSyncEvents processSyncEvents,
+            PullSyncChanges pullSyncChanges,
+            ObjectMapper objectMapper) {
         this.authenticatedUsers = authenticatedUsers;
         this.processSyncEvents = processSyncEvents;
+        this.pullSyncChanges = pullSyncChanges;
+        this.objectMapper = objectMapper;
     }
 
-    @PostMapping
+    @PostMapping("/events")
     public ResponseEntity<SyncPushResponse> push(
             @AuthenticationPrincipal AuthenticatedPrincipal principal,
             @RequestBody JsonNode request) {
@@ -63,6 +76,35 @@ public final class SyncController {
                 throw exception;
             }
             throw new SyncUnavailableException(exception);
+        }
+    }
+
+    @GetMapping("/changes")
+    public ResponseEntity<SyncPullResponse> pull(
+            @AuthenticationPrincipal AuthenticatedPrincipal principal,
+            @RequestParam(name = "business_id", required = false) UUID businessId,
+            @RequestParam(name = "cursor", defaultValue = "0") long cursor,
+            @RequestParam(name = "limit", defaultValue = "100") int limit) {
+        var user = resolveActiveUser(principal);
+        var page = pullSyncChanges.execute(user.userId(), businessId, cursor, limit);
+        return ResponseEntity.ok(toPullResponse(page));
+    }
+
+    private com.tino.backend.identity.application.port.in.AuthenticatedUserSnapshot
+            resolveActiveUser(AuthenticatedPrincipal principal) {
+        if (principal == null) {
+            throw new UnauthenticatedSyncRequestException();
+        }
+        try {
+            var user = authenticatedUsers.resolve(principal);
+            if (!user.active()) {
+                throw new SyncAccessDeniedException();
+            }
+            return user;
+        } catch (DisabledUserException exception) {
+            throw new SyncAccessDeniedException();
+        } catch (InvalidAuthenticatedPrincipalException exception) {
+            throw new UnauthenticatedSyncRequestException();
         }
     }
 
@@ -161,6 +203,22 @@ public final class SyncController {
                 result.rejected().stream().map(SyncController::toResponse).toList());
     }
 
+    private SyncPullResponse toPullResponse(SyncChangePage page) {
+        return new SyncPullResponse(
+                page.changes().stream().map(this::toChangeResponse).toList(), page.nextCursor());
+    }
+
+    private SyncChangeResponse toChangeResponse(SyncChange change) {
+        try {
+            return new SyncChangeResponse(
+                    change.eventId(), change.storeId(), change.deviceId(), change.aggregateId(),
+                    change.eventType(), change.schemaVersion(), change.occurredAt(),
+                    objectMapper.readTree(change.payloadJson()));
+        } catch (tools.jackson.core.JacksonException exception) {
+            throw new SyncUnavailableException(exception);
+        }
+    }
+
     private static RejectedEventResponse toResponse(SyncEventRejection rejection) {
         return new RejectedEventResponse(
                 rejection.eventId(), rejection.code(), rejection.retryable(), rejection.message());
@@ -179,4 +237,16 @@ public final class SyncController {
 
     public record RejectedEventResponse(
             UUID eventId, String code, boolean retryable, String message) {}
+
+    public record SyncPullResponse(List<SyncChangeResponse> changes, long nextCursor) {}
+
+    public record SyncChangeResponse(
+            UUID eventId,
+            String storeId,
+            String deviceId,
+            String aggregateId,
+            String eventType,
+            int schemaVersion,
+            Instant occurredAt,
+            tools.jackson.databind.JsonNode payload) {}
 }

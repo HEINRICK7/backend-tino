@@ -4,6 +4,7 @@ import com.tino.backend.sync.application.exception.SyncPersistenceException;
 import com.tino.backend.sync.application.exception.SyncUnavailableException;
 import com.tino.backend.sync.application.exception.SyncAccessDeniedException;
 import com.tino.backend.sync.application.exception.UnauthenticatedSyncRequestException;
+import com.tino.backend.sync.application.exception.SyncBusinessContextRequiredException;
 import java.util.UUID;
 import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
@@ -27,6 +28,12 @@ public final class SyncApiExceptionHandler {
     @ExceptionHandler(SyncAccessDeniedException.class)
     ResponseEntity<ErrorResponse> denied(SyncAccessDeniedException exception) {
         return response(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "access denied");
+    }
+
+    @ExceptionHandler(SyncBusinessContextRequiredException.class)
+    ResponseEntity<ErrorResponse> businessContextRequired(
+            SyncBusinessContextRequiredException exception) {
+        return response(HttpStatus.BAD_REQUEST, "BUSINESS_CONTEXT_REQUIRED", "business context required");
     }
 
     @ExceptionHandler({SyncUnavailableException.class, SyncPersistenceException.class})
