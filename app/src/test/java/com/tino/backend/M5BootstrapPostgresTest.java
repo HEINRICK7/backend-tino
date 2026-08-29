@@ -37,7 +37,7 @@ class M5BootstrapPostgresTest {
     void migrateAndClear() throws Exception {
         migrate().migrate();
         try (var connection = migratorConnection(); var statement = connection.createStatement()) {
-            statement.execute("TRUNCATE TABLE public.payment_provider_events, public.payment_outbox, "
+            statement.execute("TRUNCATE TABLE public.reconciliation_items, public.reconciliation_runs, public.payment_provider_events, public.payment_outbox, "
                     + "public.payment_idempotency_keys, public.payments, public.credit_audit_records, public.credit_idempotency_keys, "
                     + "public.credit_ledger_entries, public.credit_accounts, public.customer_idempotency_keys, public.customers, "
                     + "public.sync_event_rejections, public.sync_outbox, "
@@ -111,8 +111,8 @@ class M5BootstrapPostgresTest {
         var info = migrate().info();
 
         assertThat(info.applied()).extracting(migration -> migration.getVersion().toString())
-                .containsExactly("0", "1", "2", "3", "4", "5", "6", "7");
-        assertThat(info.current().getVersion().toString()).isEqualTo("7");
+                .containsExactly("0", "1", "2", "3", "4", "5", "6", "7", "8");
+        assertThat(info.current().getVersion().toString()).isEqualTo("8");
     }
 
     @Test

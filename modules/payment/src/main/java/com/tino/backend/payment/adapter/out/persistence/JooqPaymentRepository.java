@@ -81,6 +81,19 @@ public class JooqPaymentRepository implements PaymentRepository {
 
     @Override
     @Transactional(readOnly = true)
+    public Optional<Payment> findByProviderPaymentId(BusinessId businessId, String provider,
+            String providerPaymentId) {
+        try {
+            return dsl.select(ID, BUSINESS_ID, CUSTOMER_ID, AMOUNT, CURRENCY, METHOD, EXTERNAL_REFERENCE,
+                            PROVIDER, PROVIDER_PAYMENT_ID, STATUS, VERSION, CREATED_AT, UPDATED_AT)
+                    .from(PAYMENTS).where(BUSINESS_ID.eq(businessId.value()).and(PROVIDER.eq(provider))
+                            .and(PROVIDER_PAYMENT_ID.eq(providerPaymentId)))
+                    .fetchOptional().map(JooqPaymentRepository::toPayment);
+        } catch (RuntimeException exception) { throw translate(exception); }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Optional<IdempotencyRecord> findIdempotency(BusinessId businessId, String key) {
         try {
             return dsl.select(FINGERPRINT, PAYMENT_ID).from(IDEMPOTENCY)
