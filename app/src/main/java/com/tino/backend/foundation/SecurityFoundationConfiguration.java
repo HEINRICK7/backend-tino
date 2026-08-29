@@ -31,6 +31,8 @@ public class SecurityFoundationConfiguration {
         return http.authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/openapi/**", "/swagger-ui/**", "/swagger-ui.html")
                         .permitAll()
+                        .requestMatchers("/api/v1/businesses/*/payment-webhooks/**")
+                        .permitAll()
                         .anyRequest()
                         .authenticated())
                 .csrf(csrf -> csrf.disable())

@@ -53,7 +53,8 @@ class M7SyncPullPostgresTest {
     void migrateAndSeed() throws Exception {
         migrate();
         try (var connection = adminConnection(); var statement = connection.createStatement()) {
-            statement.execute("TRUNCATE TABLE public.credit_audit_records, public.credit_idempotency_keys, "
+            statement.execute("TRUNCATE TABLE public.payment_provider_events, public.payment_outbox, "
+                    + "public.payment_idempotency_keys, public.payments, public.credit_audit_records, public.credit_idempotency_keys, "
                     + "public.credit_ledger_entries, public.credit_accounts, public.customer_idempotency_keys, public.customers, "
                     + "public.sync_event_rejections, public.sync_outbox, "
                     + "public.sync_changes, public.sync_event_claims, public.device_installations, "

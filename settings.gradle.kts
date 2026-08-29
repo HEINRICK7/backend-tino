@@ -23,6 +23,7 @@ include(
     "modules:sync",
     "modules:customer",
     "modules:credit",
+    "modules:payment",
     "shared:kernel",
     "shared:infrastructure",
 )
