@@ -4,6 +4,7 @@ import com.tino.backend.fiscal.adapter.out.serpro.SerproNfeAdapter;
 import com.tino.backend.fiscal.adapter.out.serpro.SerproNfeParser;
 import com.tino.backend.fiscal.adapter.out.serpro.SerproOAuthClient;
 import com.tino.backend.fiscal.adapter.out.serpro.NfeMetrics;
+import com.tino.backend.fiscal.adapter.out.serpro.TrialFixtureNfeAdapter;
 import com.tino.backend.fiscal.application.port.out.NfeRetrievalPort;
 import com.tino.backend.fiscal.application.port.out.NfeDocumentRepository;
 import com.tino.backend.fiscal.application.port.out.NfeParser;
@@ -50,7 +51,9 @@ public class FiscalConfiguration {
     NfeRetrievalPort nfeRetrievalPort(HttpClient client, SerproOAuthClient oauth, NfeParser parser, NfeMetrics metrics,
             @Value("${tino.fiscal.serpro.base-url:https://gateway.apiserpro.serpro.gov.br/consulta-nfe-df-trial/api/v1}") String baseUrl,
             @Value("${tino.fiscal.serpro.request-tag:tino-nfe}") String requestTag,
-            @Value("${tino.fiscal.serpro.timeout:PT10S}") Duration timeout) {
+            @Value("${tino.fiscal.serpro.timeout:PT10S}") Duration timeout,
+            @Value("${tino.fiscal.mode:serpro}") String mode) {
+        if ("fixture".equalsIgnoreCase(mode)) return new TrialFixtureNfeAdapter(parser);
         return new SerproNfeAdapter(client, oauth, parser, URI.create(baseUrl), timeout, requestTag,
                 SerproNfeAdapter.RetryDelayer.production(), metrics);
     }

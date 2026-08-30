@@ -15,6 +15,7 @@ Status: `PASS — TRIAL IMPLEMENTATION F2–F6 COMPLETE`
 - `app/src/main/resources/db/migration/V10__fiscal_nfe.sql`
 - `app/src/main/resources/db/migration/V11__catalog_products.sql`
 - `app/src/main/resources/db/migration/V12__receiving_inventory.sql`
+- `app/src/main/resources/db/migration/V13__fiscal_permissions.sql`
 - `modules/fiscal/`
 - `modules/catalog/`
 - `modules/receiving/`
@@ -41,7 +42,8 @@ as decisões explícitas por item. Raw/token não são retornados pela API.
 
 ## Fixture e prova fiscal
 
-Fixture: `modules/fiscal/src/test/resources/serpro/consulta-nfe-trial-official-sanitized.json`.
+Fixture: `modules/fiscal/src/main/resources/serpro/consulta-nfe-trial-official-sanitized.json`.
+The same sanitized fixture is retained in test resources for parser tests.
 Chave Trial fictícia: `53160911510448000171550010000106771000187760`.
 O adapter foi coberto com sucesso, 401 + renovação única, 408/500/504 com no
 máximo um retry, 404, payload inválido e timeout como `OUTCOME_UNKNOWN`.
@@ -57,10 +59,16 @@ persistência de nova versão e repetição idempotente sem chamada externa.
 ./gradlew architecture migrations --rerun-tasks --no-daemon --console=plain
 ./scripts/secret-scan.sh
 git diff --check
+TINO_APP_PORT=58080 TINO_KEYCLOAK_PORT=58082 ./scripts/trial-smoke-test.sh
 ```
 
 Resultado final: suíte Gradle verde, Modulith/architecture verde, migrations
-V0–V12 válidas, secret scan verde e nenhum erro no diff.
+V0–V13 válidas, secret scan verde, smoke E2E Trial verde e nenhum erro no diff.
+
+Smoke E2E observado no Compose isolado: `201` na criação do negócio, `200` na
+recuperação/preview/confirm/reprocessamento, zero movimentos e saldos antes da
+confirmação, um receipt e um movimento depois, saldo `5.000000000`, confirmação
+repetida retornando o mesmo receipt e duas versões fiscais após reprocessar.
 
 ## Limites mantidos
 

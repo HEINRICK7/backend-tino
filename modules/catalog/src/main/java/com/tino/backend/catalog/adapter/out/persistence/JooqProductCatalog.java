@@ -36,6 +36,18 @@ public class JooqProductCatalog implements ProductCatalog {
     private static final Field<String> STATUS = field("status", String.class);
     private static final Field<OffsetDateTime> CREATED_AT = field("created_at", OffsetDateTime.class);
     private static final Field<OffsetDateTime> UPDATED_AT = field("updated_at", OffsetDateTime.class);
+    private static final Field<UUID> PRODUCTS_ID = qualified("products", "id", UUID.class);
+    private static final Field<UUID> PRODUCTS_BUSINESS_ID = qualified("products", "business_id", UUID.class);
+    private static final Field<String> PRODUCTS_NAME = qualified("products", "name", String.class);
+    private static final Field<String> PRODUCTS_BASE_UNIT = qualified("products", "base_unit", String.class);
+    private static final Field<UUID> IDENTIFIERS_BUSINESS_ID = qualified("product_identifiers", "business_id", UUID.class);
+    private static final Field<UUID> IDENTIFIERS_PRODUCT_ID = qualified("product_identifiers", "product_id", UUID.class);
+    private static final Field<String> IDENTIFIERS_TYPE = qualified("product_identifiers", "identifier_type", String.class);
+    private static final Field<String> IDENTIFIERS_VALUE = qualified("product_identifiers", "identifier_value", String.class);
+    private static final Field<UUID> MAPPINGS_BUSINESS_ID = qualified("supplier_product_mappings", "business_id", UUID.class);
+    private static final Field<UUID> MAPPINGS_PRODUCT_ID = qualified("supplier_product_mappings", "product_id", UUID.class);
+    private static final Field<String> MAPPINGS_ISSUER = qualified("supplier_product_mappings", "issuer_document", String.class);
+    private static final Field<String> MAPPINGS_SUPPLIER_CODE = qualified("supplier_product_mappings", "supplier_product_code", String.class);
     private final DSLContext dsl;
 
     public JooqProductCatalog(DSLContext dsl) { this.dsl = dsl; }
@@ -44,18 +56,18 @@ public class JooqProductCatalog implements ProductCatalog {
     public ProductResolution resolve(BusinessId businessId, String issuerDocument, CanonicalNfeItem item) {
         var gtin = usableGtin(item.gtin());
         if (gtin != null) {
-            var matched = dsl.select(PRODUCTS.field(ID), PRODUCTS.field(NAME), PRODUCTS.field(BASE_UNIT))
-                    .from(PRODUCTS).join(IDENTIFIERS).on(PRODUCTS.field(BUSINESS_ID).eq(IDENTIFIERS.field(BUSINESS_ID)).and(PRODUCTS.field(ID).eq(IDENTIFIERS.field(PRODUCT_ID))))
-                    .where(PRODUCTS.field(BUSINESS_ID).eq(businessId.value()).and(IDENTIFIERS.field(TYPE).eq("GTIN")).and(IDENTIFIERS.field(VALUE).eq(gtin)))
+            var matched = dsl.select(PRODUCTS_ID, PRODUCTS_NAME, PRODUCTS_BASE_UNIT)
+                    .from(PRODUCTS).join(IDENTIFIERS).on(PRODUCTS_BUSINESS_ID.eq(IDENTIFIERS_BUSINESS_ID).and(PRODUCTS_ID.eq(IDENTIFIERS_PRODUCT_ID)))
+                    .where(PRODUCTS_BUSINESS_ID.eq(businessId.value()).and(IDENTIFIERS_TYPE.eq("GTIN")).and(IDENTIFIERS_VALUE.eq(gtin)))
                     .fetchOptional();
-            if (matched.isPresent()) return new ProductResolution(ProductResolution.Status.MATCHED, matched.get().get(PRODUCTS.field(ID)), matched.get().get(PRODUCTS.field(NAME)), matched.get().get(PRODUCTS.field(BASE_UNIT)));
+            if (matched.isPresent()) return new ProductResolution(ProductResolution.Status.MATCHED, matched.get().get(PRODUCTS_ID), matched.get().get(PRODUCTS_NAME), matched.get().get(PRODUCTS_BASE_UNIT));
         }
         if (issuerDocument != null && item.supplierProductCode() != null) {
-            var mapped = dsl.select(PRODUCTS.field(ID), PRODUCTS.field(NAME), PRODUCTS.field(BASE_UNIT)).from(PRODUCTS).join(MAPPINGS)
-                    .on(PRODUCTS.field(BUSINESS_ID).eq(MAPPINGS.field(BUSINESS_ID)).and(PRODUCTS.field(ID).eq(MAPPINGS.field(PRODUCT_ID))))
-                    .where(PRODUCTS.field(BUSINESS_ID).eq(businessId.value()).and(MAPPINGS.field(ISSUER).eq(issuerDocument)).and(MAPPINGS.field(SUPPLIER_CODE).eq(item.supplierProductCode())))
+            var mapped = dsl.select(PRODUCTS_ID, PRODUCTS_NAME, PRODUCTS_BASE_UNIT).from(PRODUCTS).join(MAPPINGS)
+                    .on(PRODUCTS_BUSINESS_ID.eq(MAPPINGS_BUSINESS_ID).and(PRODUCTS_ID.eq(MAPPINGS_PRODUCT_ID)))
+                    .where(PRODUCTS_BUSINESS_ID.eq(businessId.value()).and(MAPPINGS_ISSUER.eq(issuerDocument)).and(MAPPINGS_SUPPLIER_CODE.eq(item.supplierProductCode())))
                     .fetchOptional();
-            if (mapped.isPresent()) return new ProductResolution(ProductResolution.Status.MATCHED, mapped.get().get(PRODUCTS.field(ID)), mapped.get().get(PRODUCTS.field(NAME)), mapped.get().get(PRODUCTS.field(BASE_UNIT)));
+            if (mapped.isPresent()) return new ProductResolution(ProductResolution.Status.MATCHED, mapped.get().get(PRODUCTS_ID), mapped.get().get(PRODUCTS_NAME), mapped.get().get(PRODUCTS_BASE_UNIT));
         }
         return new ProductResolution(ProductResolution.Status.NEW_CANDIDATE, null, item.description(), item.commercialUnit());
     }
@@ -94,5 +106,6 @@ public class JooqProductCatalog implements ProductCatalog {
     private static boolean validGtin(String value) { var sum = 0; var weight = 3; for (var i = value.length() - 2; i >= 0; i--, weight = 4 - weight) sum += Character.digit(value.charAt(i), 10) * weight; return (10 - sum % 10) % 10 == Character.digit(value.charAt(value.length() - 1), 10); }
     private static Table<?> table(String name) { return DSL.table(DSL.name("public", name)); }
     private static <T> Field<T> field(String name, Class<T> type) { return DSL.field(DSL.name(name), type); }
+    private static <T> Field<T> qualified(String table, String column, Class<T> type) { return DSL.field(DSL.name(table, column), type); }
     private static OffsetDateTime time(Instant value) { return value.atOffset(ZoneOffset.UTC); }
 }

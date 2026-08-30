@@ -47,6 +47,7 @@ services:
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://localhost:${TINO_KEYCLOAK_PORT:-8081}/realms/tino
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8080/realms/tino/protocol/openid-connect/certs
       TINO_SECURITY_OIDC_CLIENT_ID: tino-android
+      TINO_FISCAL_MODE: ${TINO_FISCAL_MODE:-fixture}
     init: true
     read_only: true
     security_opt:

@@ -32,7 +32,9 @@ public class JooqInventoryRepository implements InventoryPort {
                 .values(UUID.randomUUID(), businessId.value(), productId, receiptId, quantity, unitCost, time(now)).onConflict(BUSINESS_ID, RECEIPT_ID, PRODUCT_ID).doNothing().execute();
         if (inserted == 0) return;
         dsl.insertInto(BALANCES).columns(BUSINESS_ID, PRODUCT_ID, QUANTITY, UPDATED_AT).values(businessId.value(), productId, quantity, time(now))
-                .onConflict(BUSINESS_ID, PRODUCT_ID).doUpdate().set(QUANTITY, BALANCES.field(QUANTITY).plus(quantity)).set(UPDATED_AT, time(now)).execute();
+                .onConflict(BUSINESS_ID, PRODUCT_ID).doUpdate()
+                .set(QUANTITY, DSL.field(DSL.name("inventory_balances", "quantity"), BigDecimal.class).plus(quantity))
+                .set(UPDATED_AT, time(now)).execute();
     }
     private static Table<?> table(String name) { return DSL.table(DSL.name("public", name)); }
     private static <T> Field<T> field(String name, Class<T> type) { return DSL.field(DSL.name(name), type); }

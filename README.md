@@ -29,8 +29,19 @@ set +a
 docker compose up --build
 ```
 
-Compose starts the Spring Boot application, PostgreSQL, and Keycloak in separate containers. For a shorter feedback loop, the application can still run directly through Gradle after starting only the infrastructure services with `docker compose up -d postgres keycloak`.
-If the default ports are occupied, use `TINO_APP_PORT=58080 TINO_POSTGRES_PORT=55432 TINO_KEYCLOAK_PORT=58081 docker compose up --build`.
+Compose starts the Spring Boot application, PostgreSQL, and Keycloak in separate containers. Local Compose defaults `TINO_FISCAL_MODE=fixture`, which enables the official sanitized Trial fixture without SERPRO credentials; use `TINO_FISCAL_MODE=serpro` only when Trial credentials are supplied through the environment. For a shorter feedback loop, the application can still run directly through Gradle after starting only the infrastructure services with `docker compose up -d postgres keycloak`.
+If the default ports are occupied, use `TINO_APP_PORT=58080 TINO_POSTGRES_PORT=55433 TINO_KEYCLOAK_PORT=58082 docker compose up --build`.
+
+Run the authenticated NF-e Trial smoke test against a running Compose stack with:
+
+```bash
+TINO_APP_PORT=58080 TINO_KEYCLOAK_PORT=58082 ./scripts/trial-smoke-test.sh
+```
+
+The script creates or resets only its local Keycloak test user, retrieves the
+sanitized official Trial fixture, verifies that preview does not change stock,
+confirms the receipt transactionally, checks confirmation idempotency, and
+reprocesses the fiscal document. It never prints access tokens or passwords.
 
 `scripts/create-local-env.sh` generates local credentials at runtime into the ignored, mode-`600` `.env` file and refuses to overwrite an existing file. Compose reads it automatically; exporting it as shown also supplies Spring Boot and jOOQ. No password has a committed default. Production credentials and private keys must come from the platform secret store and must never be committed.
 
