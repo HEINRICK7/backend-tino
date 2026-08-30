@@ -13,6 +13,7 @@ dependencies {
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.validation)
     implementation(libs.spring.boot.starter.security)
+    compileOnly(libs.springdoc.openapi)
     compileOnly(libs.spring.modulith.starter.core)
     implementation(libs.jooq)
     testImplementation(libs.spring.boot.starter.test)

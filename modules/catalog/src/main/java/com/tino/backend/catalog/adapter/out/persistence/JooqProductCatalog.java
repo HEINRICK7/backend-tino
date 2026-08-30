@@ -1,6 +1,7 @@
 package com.tino.backend.catalog.adapter.out.persistence;
 
 import com.tino.backend.catalog.application.model.ProductResolution;
+import com.tino.backend.catalog.application.model.ProductSearchItem;
 import com.tino.backend.catalog.application.port.out.ProductCatalog;
 import com.tino.backend.fiscal.domain.model.CanonicalNfeItem;
 import com.tino.backend.shared.kernel.BusinessId;
@@ -9,6 +10,8 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Optional;
+import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import org.jooq.DSLContext;
 import org.jooq.Field;
@@ -100,6 +103,31 @@ public class JooqProductCatalog implements ProductCatalog {
 
     public Optional<BigDecimal> conversion(BusinessId businessId, String issuerDocument, String supplierCode, String purchaseUnit, String baseUnit) {
         return dsl.select(FACTOR).from(CONVERSIONS).where(BUSINESS_ID.eq(businessId.value()).and(ISSUER.eq(issuerDocument)).and(SUPPLIER_CODE.eq(supplierCode)).and(PURCHASE_UNIT.eq(purchaseUnit)).and(BASE_UNIT.eq(baseUnit)).and(STATUS.eq("CONFIRMED"))).fetchOptional(FACTOR);
+    }
+
+    @Override
+    public List<ProductSearchItem> search(BusinessId businessId, String text, String gtin, int limit) {
+        var condition = PRODUCTS_BUSINESS_ID.eq(businessId.value()).and(field("status", String.class).eq("ACTIVE"));
+        if (text != null && !text.isBlank()) {
+            condition = condition.and(DSL.lower(PRODUCTS_NAME).like("%" + text.trim().toLowerCase(Locale.ROOT) + "%"));
+        }
+        var normalizedGtin = usableGtin(gtin);
+        if (normalizedGtin != null) {
+            condition = condition.and(DSL.exists(DSL.selectOne().from(IDENTIFIERS)
+                    .where(IDENTIFIERS_BUSINESS_ID.eq(businessId.value())
+                            .and(IDENTIFIERS_PRODUCT_ID.eq(PRODUCTS_ID))
+                            .and(IDENTIFIERS_TYPE.eq("GTIN"))
+                            .and(IDENTIFIERS_VALUE.eq(normalizedGtin)))));
+        }
+        var rows = dsl.select(PRODUCTS_ID, PRODUCTS_NAME, PRODUCTS_BASE_UNIT)
+                .from(PRODUCTS).where(condition)
+                .orderBy(PRODUCTS_NAME.asc(), PRODUCTS_ID.asc()).limit(limit).fetch();
+        return rows.map(row -> new ProductSearchItem(row.get(PRODUCTS_ID), row.get(PRODUCTS_NAME),
+                row.get(PRODUCTS_BASE_UNIT), dsl.select(VALUE).from(IDENTIFIERS)
+                        .where(IDENTIFIERS_BUSINESS_ID.eq(businessId.value())
+                                .and(IDENTIFIERS_PRODUCT_ID.eq(row.get(PRODUCTS_ID)))
+                                .and(IDENTIFIERS_TYPE.eq("GTIN")))
+                        .orderBy(ID.asc()).limit(1).fetchOptional(VALUE).orElse(null)));
     }
 
     private static String usableGtin(String value) { if (value == null || value.isBlank() || value.equalsIgnoreCase("SEM GTIN")) return null; var v = value.replaceAll("\\D", ""); return v.matches("(?:\\d{8}|\\d{12,14})") && validGtin(v) ? v : null; }

@@ -1,7 +1,10 @@
 package com.tino.backend.fiscal.application.usecase;
 
 import com.tino.backend.business.application.port.in.BusinessAuthorization;
+import com.tino.backend.fiscal.application.exception.NfeDocumentNotFoundException;
 import com.tino.backend.fiscal.application.model.NfeDocumentSnapshot;
+import com.tino.backend.fiscal.application.exception.NfeDocumentNotFoundException;
+import com.tino.backend.fiscal.application.exception.NfeIdempotencyConflictException;
 import com.tino.backend.fiscal.application.model.NfeRetrievalResult;
 import com.tino.backend.fiscal.application.port.out.NfeDocumentRepository;
 import com.tino.backend.fiscal.application.port.out.NfeParser;
@@ -30,11 +33,11 @@ public final class ReprocessNfe {
     public NfeDocumentSnapshot execute(UUID userId, BusinessId businessId, UUID documentId, String idempotencyKey) {
         return authorization.execute(userId, businessId, authorized -> {
             var current = documents.find(authorized, documentId)
-                    .orElseThrow(() -> new IllegalArgumentException("fiscal document not found"));
+                    .orElseThrow(NfeDocumentNotFoundException::new);
             var existingKey = documents.findIdempotency(authorized, idempotencyKey);
             if (existingKey.isPresent()) {
                 if (!existingKey.get().documentId().equals(documentId)) {
-                    throw new IllegalArgumentException("Idempotency-Key was already used for another NF-e");
+                    throw new NfeIdempotencyConflictException();
                 }
                 return current;
             }

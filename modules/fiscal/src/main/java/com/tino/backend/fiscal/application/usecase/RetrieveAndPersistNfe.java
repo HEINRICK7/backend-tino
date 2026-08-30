@@ -2,6 +2,7 @@ package com.tino.backend.fiscal.application.usecase;
 
 import com.tino.backend.business.application.port.in.BusinessAccess;
 import com.tino.backend.fiscal.application.model.NfeDocumentSnapshot;
+import com.tino.backend.fiscal.application.exception.NfeIdempotencyConflictException;
 import com.tino.backend.fiscal.application.port.out.NfeDocumentRepository;
 import com.tino.backend.fiscal.application.port.out.NfeRetrievalPort;
 import com.tino.backend.fiscal.domain.model.NfeAccessKey;
@@ -38,7 +39,7 @@ public final class RetrieveAndPersistNfe {
         var authorizedBusiness = access.require(userId, requestedBusiness);
         var existing = tenants.execute(authorizedBusiness, () -> documents.findIdempotency(authorizedBusiness, idempotencyKey)
                 .map(value -> documents.find(authorizedBusiness, value.documentId()).orElse(null)));
-        if (existing.isPresent() && !existing.get().accessKey().equals(key)) throw new IllegalArgumentException("Idempotency-Key was already used for another NF-e");
+        if (existing.isPresent() && !existing.get().accessKey().equals(key)) throw new NfeIdempotencyConflictException();
         existing = existing.isPresent() ? existing : tenants.execute(authorizedBusiness, () -> documents.findByAccessKey(authorizedBusiness, key));
         if (existing.isPresent() && existing.get().retrievalStatus() == RetrievalStatus.SUCCESS) return existing.get();
         var documentId = existing.map(NfeDocumentSnapshot::id).orElseGet(ids::next);
