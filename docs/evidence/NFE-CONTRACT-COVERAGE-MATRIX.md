@@ -36,7 +36,7 @@ JSONB; todos os campos raw do provider permanecem preservados em `raw_payload`.
 | `protNFe/infProt/cStat` | protocolo | `fiscalStatus` | `CanonicalNfeDocument.fiscalStatus` | `nfe_documents.fiscal_status` + canonical | bloqueia CANCELLED/DENIED | `REQUIRED_FOR_GOODS_RECEIPT` |
 | `det/@nItem` | item | `lineNumber` | `CanonicalNfeItem.lineNumber` | `nfe_items.line_number` | decisão humana | `REQUIRED_FOR_GOODS_RECEIPT` |
 | `det/prod/cProd` | item | `supplierProductCode` | `CanonicalNfeItem.supplierProductCode` | `nfe_items.supplier_product_code` | mapping/candidato | `REQUIRED_FOR_GOODS_RECEIPT` |
-| `det/prod/cEAN` | item | `gtin` | `CanonicalNfeItem.gtin` | `nfe_items.gtin` | resolução por GTIN | `REQUIRED_FOR_GOODS_RECEIPT` |
+| `det/prod/cEAN` | item | `gtin` | `CanonicalNfeItem.gtin` | `nfe_items.gtin` | resolução por GTIN quando utilizável | `OPTIONAL_SUPPORTED` |
 | `det/prod/xProd` | item | `description` | `CanonicalNfeItem.description` | `nfe_items.description` | candidato/criação autorizada | `REQUIRED_FOR_GOODS_RECEIPT` |
 | `det/prod/NCM` | item | `ncm` | `CanonicalNfeItem.ncm` | `nfe_items.ncm` | evidência | `PRESERVED_FOR_FISCAL_EVIDENCE` |
 | `det/prod/CEST` | item | `cest` | `CanonicalNfeItem.cest` | `nfe_items.cest` | evidência | `PRESERVED_FOR_FISCAL_EVIDENCE` |
@@ -54,6 +54,11 @@ JSONB; todos os campos raw do provider permanecem preservados em `raw_payload`.
 | `det/prod/vSeg` | item | `insurance` | `CanonicalNfeItem.insurance` | `nfe_items.insurance` | preservado, não rateado no MVP | `PRESERVED_FOR_FISCAL_EVIDENCE` |
 | `det/prod/vOutro` | item | `otherValue` | `CanonicalNfeItem.otherValue` | `nfe_items.other_value` | preservado, não rateado no MVP | `PRESERVED_FOR_FISCAL_EVIDENCE` |
 | `det/prod/indTot` | item | `includedInTotal` | `CanonicalNfeItem.includedInTotal` | `nfe_items.included_in_total` | conferência | `PRESERVED_FOR_FISCAL_EVIDENCE` |
+
+`cEAN` não é obrigatório para aceitar uma entrada. Quando ausente, vazio ou
+não utilizável, o fluxo segue o fallback determinístico `GTIN → issuer + cProd
+→ candidato para revisão humana`; a ausência de GTIN nunca deve rejeitar por
+si só uma NF-e válida nem criar produto silenciosamente.
 
 ## Campos fora do recorte operacional
 
