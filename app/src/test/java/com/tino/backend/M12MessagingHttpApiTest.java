@@ -55,7 +55,7 @@ class M12MessagingHttpApiTest {
                 POSTGRES.migratorPassword()).locations("classpath:db/migration").load().migrate();
         try (var connection = DriverManager.getConnection(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
                 var statement = connection.createStatement()) {
-            statement.execute("TRUNCATE TABLE public.message_delivery_evidence, public.message_outbox, public.messages, "
+            statement.execute("TRUNCATE TABLE public.inventory_movements, public.inventory_balances, public.goods_receipt_items, public.goods_receipts, public.goods_receipt_preview_items, public.goods_receipt_previews, public.packaging_conversions, public.supplier_product_mappings, public.product_identifiers, public.products, public.nfe_retrieval_idempotency_keys, public.nfe_items, public.nfe_document_versions, public.nfe_documents, public.message_delivery_evidence, public.message_outbox, public.messages, "
                     + "public.message_consent_audit, public.message_consents, public.reconciliation_items, "
                     + "public.reconciliation_runs, public.payment_provider_events, public.payment_outbox, "
                     + "public.payment_idempotency_keys, public.payments, public.credit_audit_records, "

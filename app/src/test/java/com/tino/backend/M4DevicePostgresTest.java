@@ -119,7 +119,7 @@ class M4DevicePostgresTest {
     @BeforeEach
     void clearData() throws Exception {
         try (var connection = adminConnection(); var statement = connection.createStatement()) {
-            statement.execute("TRUNCATE TABLE public.message_delivery_evidence, public.message_outbox, public.messages, public.message_consent_audit, public.message_consents, public.reconciliation_items, public.reconciliation_runs, public.payment_provider_events, public.payment_outbox, "
+            statement.execute("TRUNCATE TABLE public.inventory_movements, public.inventory_balances, public.goods_receipt_items, public.goods_receipts, public.goods_receipt_preview_items, public.goods_receipt_previews, public.packaging_conversions, public.supplier_product_mappings, public.product_identifiers, public.products, public.nfe_retrieval_idempotency_keys, public.nfe_items, public.nfe_document_versions, public.nfe_documents, public.message_delivery_evidence, public.message_outbox, public.messages, public.message_consent_audit, public.message_consents, public.reconciliation_items, public.reconciliation_runs, public.payment_provider_events, public.payment_outbox, "
                     + "public.payment_idempotency_keys, public.payments, public.credit_audit_records, public.credit_idempotency_keys, "
                     + "public.credit_ledger_entries, public.credit_accounts, public.customer_idempotency_keys, public.customers, "
                     + "public.sync_event_rejections, public.sync_outbox, "
@@ -463,7 +463,7 @@ class M4DevicePostgresTest {
             fresh.start();
             var result = migrate(fresh).migrate();
             assertThat(result.success).isTrue();
-            assertThat(result.migrationsExecuted).isEqualTo(10);
+            assertThat(result.migrationsExecuted).isEqualTo(13);
         }
     }
 

@@ -2,6 +2,7 @@ package com.tino.backend.business;
 
 import com.tino.backend.business.application.exception.BusinessAccessDeniedException;
 import com.tino.backend.business.application.port.in.BusinessAuthorization;
+import com.tino.backend.business.application.port.in.BusinessAccess;
 import com.tino.backend.business.application.port.in.BusinessAuthorizationDeniedException;
 import com.tino.backend.business.application.port.in.BusinessContextReader;
 import com.tino.backend.business.application.port.in.BusinessContextUnavailableException;
@@ -76,6 +77,11 @@ public class BusinessConfiguration {
                 }
             }
         };
+    }
+
+    @Bean
+    BusinessAccess businessAccess(ResolveBusinessAccess access) {
+        return (userId, businessId) -> access.execute(new UserId(userId), businessId).businessId();
     }
 
     private static AccessibleBusinessView toPublicView(

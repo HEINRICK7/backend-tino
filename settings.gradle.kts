@@ -26,6 +26,10 @@ include(
     "modules:payment",
     "modules:reconciliation",
     "modules:messaging",
+    "modules:fiscal",
+    "modules:catalog",
+    "modules:receiving",
+    "modules:inventory",
     "shared:kernel",
     "shared:infrastructure",
 )

@@ -52,3 +52,17 @@ springdoc:
     path: /openapi
   swagger-ui:
     path: /swagger-ui.html
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      serpro:
+        sliding-window-size: 20
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 2
+  bulkhead:
+    instances:
+      serpro:
+        max-concurrent-calls: 4
+        max-wait-duration: 0ms
