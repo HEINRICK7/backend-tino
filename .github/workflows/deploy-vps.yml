@@ -125,6 +125,8 @@ jobs:
           retry_scp deploy/compose.vps.yaml "$VPS_USER@$VPS_HOST:/opt/tino/compose.vps.yaml"
           retry_scp docker/keycloak/tino-realm.json "$VPS_USER@$VPS_HOST:/opt/tino/tino-realm.json"
           retry_scp docker/postgres/init.sh "$VPS_USER@$VPS_HOST:/opt/tino/init.sh"
+          retry_scp deploy/nginx/tino-http.conf "$VPS_USER@$VPS_HOST:/opt/tino/tino-http.conf"
+          retry_scp deploy/nginx/tino.conf "$VPS_USER@$VPS_HOST:/opt/tino/tino.conf"
       - name: Deploy without stopping other Compose projects
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
@@ -161,6 +163,7 @@ jobs:
           : "${TINO_API_HOST:?missing TINO_API_HOST}"
           : "${TINO_AUTH_HOST:?missing TINO_AUTH_HOST}"
           : "${TINO_VPS_IPV4:?missing TINO_VPS_IPV4}"
+          : "${TINO_LETSENCRYPT_EMAIL:?missing TINO_LETSENCRYPT_EMAIL}"
           for host in "$TINO_API_HOST" "$TINO_AUTH_HOST"; do
             resolved="$(getent ahostsv4 "$host" | awk 'NR == 1 {print $1}')"
             test "$resolved" = "$TINO_VPS_IPV4" || {
@@ -168,17 +171,48 @@ jobs:
               exit 20
             }
           done
-          for port in 80 443; do
+          nginx_config=/etc/nginx/sites-available/tino-backend.conf
+          nginx_link=/etc/nginx/sites-enabled/tino-backend.conf
+          if test -e "$nginx_config" && ! grep -q 'managed by TINO deployment' "$nginx_config"; then
+            echo "Refusing to overwrite an unrelated Nginx configuration: $nginx_config" >&2
+            exit 23
+          fi
+          if test -e "$nginx_link" && ! test -L "$nginx_link"; then
+            echo "Refusing to overwrite an unrelated Nginx site entry: $nginx_link" >&2
+            exit 24
+          fi
+          for port in 18080 18581; do
             if ss -ltnH "( sport = :$port )" | grep -q .; then
               owned="$(docker ps --filter label=com.docker.compose.project=tino --format '{{.Ports}}' | grep -E "(^|[ ,])[^ ]*:$port->" || true)"
               test -n "$owned" || {
-                echo "Port $port is already occupied by a non-TINO service; aborting without stopping anything" >&2
+                echo "Private TINO port $port is already occupied by another service; aborting without stopping anything" >&2
                 exit 21
               }
             fi
           done
+          systemctl is-active --quiet nginx || {
+            echo 'The existing host Nginx service is not active; aborting without changing it' >&2
+            exit 25
+          }
+          install -d -m 755 /var/www/tino-acme
+          sed -e "s/__TINO_API_HOST__/$TINO_API_HOST/g" \
+            -e "s/__TINO_AUTH_HOST__/$TINO_AUTH_HOST/g" \
+            /opt/tino/tino-http.conf > "$nginx_config"
+          ln -sfn "$nginx_config" "$nginx_link"
+          nginx -t
+          systemctl reload nginx
+          certbot certonly --webroot -w /var/www/tino-acme \
+            --cert-name tino \
+            -d "$TINO_API_HOST" -d "$TINO_AUTH_HOST" \
+            --non-interactive --agree-tos --keep-until-expiring \
+            --email "$TINO_LETSENCRYPT_EMAIL"
           docker compose --env-file /opt/tino/.env -f /opt/tino/compose.vps.yaml pull app
           docker compose --env-file /opt/tino/.env -f /opt/tino/compose.vps.yaml up -d --no-build --remove-orphans
+          sed -e "s/__TINO_API_HOST__/$TINO_API_HOST/g" \
+            -e "s/__TINO_AUTH_HOST__/$TINO_AUTH_HOST/g" \
+            /opt/tino/tino.conf > "$nginx_config"
+          nginx -t
+          systemctl reload nginx
           docker compose --env-file /opt/tino/.env -f /opt/tino/compose.vps.yaml ps
           for attempt in $(seq 1 30); do
             if curl --fail --silent --show-error "https://$TINO_API_HOST/actuator/health/readiness" >/dev/null; then

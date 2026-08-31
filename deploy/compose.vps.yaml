@@ -51,18 +51,15 @@ services:
       KC_METRICS_ENABLED: "true"
       KC_BOOTSTRAP_ADMIN_USERNAME: ${TINO_KEYCLOAK_ADMIN_USERNAME:-admin}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${TINO_KEYCLOAK_ADMIN_PASSWORD:?missing TINO_KEYCLOAK_ADMIN_PASSWORD}
-      VIRTUAL_HOST: ${TINO_AUTH_HOST:?missing TINO_AUTH_HOST}
-      VIRTUAL_PORT: "8080"
-      LETSENCRYPT_HOST: ${TINO_AUTH_HOST:?missing TINO_AUTH_HOST}
-      LETSENCRYPT_EMAIL: ${TINO_LETSENCRYPT_EMAIL:?missing TINO_LETSENCRYPT_EMAIL}
     depends_on:
       keycloak-db:
         condition: service_healthy
     volumes:
       - ./tino-realm.json:/opt/keycloak/data/import/tino-realm.json:ro
-    expose: ["8080"]
+    ports:
+      - "127.0.0.1:18581:8080"
     restart: unless-stopped
-    networks: [private, edge]
+    networks: [private]
 
   app:
     image: ${TINO_IMAGE:?missing TINO_IMAGE}
@@ -77,10 +74,6 @@ services:
       TINO_FISCAL_MODE: ${TINO_FISCAL_MODE:-fixture}
       MANAGEMENT_TRACING_SAMPLING_PROBABILITY: ${MANAGEMENT_TRACING_SAMPLING_PROBABILITY:-0.1}
       OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-true}
-      VIRTUAL_HOST: ${TINO_API_HOST:?missing TINO_API_HOST}
-      VIRTUAL_PORT: "8080"
-      LETSENCRYPT_HOST: ${TINO_API_HOST:?missing TINO_API_HOST}
-      LETSENCRYPT_EMAIL: ${TINO_LETSENCRYPT_EMAIL:?missing TINO_LETSENCRYPT_EMAIL}
     depends_on:
       postgres:
         condition: service_healthy
@@ -92,50 +85,15 @@ services:
       - no-new-privileges:true
     cap_drop: [ALL]
     tmpfs: [/tmp]
-    expose: ["8080"]
-    restart: unless-stopped
-    networks: [private, edge]
-
-  nginx-proxy:
-    image: nginxproxy/nginx-proxy:1.7.0
-    environment:
-      ENABLE_IPV6: "true"
     ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - tino-proxy-certs:/etc/nginx/certs:ro
-      - tino-proxy-vhost:/etc/nginx/vhost.d
-      - tino-proxy-html:/usr/share/nginx/html
-      - /var/run/docker.sock:/tmp/docker.sock:ro
+      - "127.0.0.1:18080:8080"
     restart: unless-stopped
-    networks: [edge]
-
-  acme-companion:
-    image: nginxproxy/acme-companion:2.4.0
-    environment:
-      DEFAULT_EMAIL: ${TINO_LETSENCRYPT_EMAIL:?missing TINO_LETSENCRYPT_EMAIL}
-      NGINX_PROXY_CONTAINER: tino-nginx-proxy-1
-    depends_on:
-      - nginx-proxy
-    volumes_from:
-      - nginx-proxy
-    volumes:
-      - tino-proxy-certs:/etc/nginx/certs:rw
-      - tino-proxy-acme:/etc/acme.sh
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    restart: unless-stopped
-    networks: [edge]
+    networks: [private]
 
 volumes:
   tino-postgres:
   tino-keycloak-postgres:
-  tino-proxy-certs:
-  tino-proxy-vhost:
-  tino-proxy-html:
-  tino-proxy-acme:
 
 networks:
   private:
     internal: true
-  edge:
