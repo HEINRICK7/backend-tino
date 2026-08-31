@@ -59,7 +59,7 @@ services:
     ports:
       - "127.0.0.1:18581:8080"
     restart: unless-stopped
-    networks: [private]
+    networks: [private, edge]
 
   app:
     image: ${TINO_IMAGE:?missing TINO_IMAGE}
@@ -88,7 +88,7 @@ services:
     ports:
       - "127.0.0.1:18080:8080"
     restart: unless-stopped
-    networks: [private]
+    networks: [private, edge]
 
 volumes:
   tino-postgres:
@@ -97,3 +97,4 @@ volumes:
 networks:
   private:
     internal: true
+  edge:
