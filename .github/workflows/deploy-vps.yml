@@ -1,0 +1,161 @@
+name: build-and-deploy-vps
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: tino-vps-production
+  cancel-in-progress: false
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Scan tracked files for hardcoded secrets
+        run: ./scripts/secret-scan.sh
+      - name: Validate Compose
+        run: |
+          ./scripts/create-local-env.sh
+          docker compose config --quiet
+      - name: Build, tests and architecture
+        run: |
+          set -a
+          . ./.env
+          set +a
+          ./gradlew clean build architecture --no-daemon
+
+  publish:
+    needs: gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Define image tags
+        id: meta
+        env:
+          REPOSITORY: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          image="ghcr.io/${REPOSITORY,,}"
+          echo "image=${image}:${SHA}" >> "$GITHUB_OUTPUT"
+          echo "IMAGE_NAME=${image}" >> "$GITHUB_ENV"
+      - name: Build and publish immutable image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}
+            ${{ env.IMAGE_NAME }}:main
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: tino-vps
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SSH material
+        env:
+          VPS_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          test -n "$VPS_PRIVATE_KEY"
+          test -n "$VPS_KNOWN_HOSTS"
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$VPS_PRIVATE_KEY" > "$HOME/.ssh/tino_deploy"
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/tino_deploy" "$HOME/.ssh/known_hosts"
+      - name: Upload deployment definition
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_SSH_USER }}
+        run: |
+          set -euo pipefail
+          test -n "$VPS_HOST"
+          test -n "$VPS_USER"
+          ssh -i "$HOME/.ssh/tino_deploy" "$VPS_USER@$VPS_HOST" 'install -d -m 700 /opt/tino'
+          scp -i "$HOME/.ssh/tino_deploy" deploy/compose.vps.yaml "$VPS_USER@$VPS_HOST:/opt/tino/compose.vps.yaml"
+          scp -i "$HOME/.ssh/tino_deploy" docker/keycloak/tino-realm.json "$VPS_USER@$VPS_HOST:/opt/tino/tino-realm.json"
+          scp -i "$HOME/.ssh/tino_deploy" docker/postgres/init.sh "$VPS_USER@$VPS_HOST:/opt/tino/init.sh"
+      - name: Deploy without stopping other Compose projects
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_SSH_USER }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+          TINO_ENV_FILE: ${{ secrets.TINO_VPS_ENV }}
+          TINO_IMAGE: ${{ needs.publish.outputs.image }}
+        run: |
+          set -euo pipefail
+          test -n "$TINO_ENV_FILE"
+          printf '%s\n' "$TINO_ENV_FILE" | ssh -i "$HOME/.ssh/tino_deploy" "$VPS_USER@$VPS_HOST" 'umask 077; cat > /opt/tino/.env'
+          printf '%s' "$GHCR_TOKEN" | ssh -i "$HOME/.ssh/tino_deploy" "$VPS_USER@$VPS_HOST" "docker login ghcr.io --username '$GHCR_USER' --password-stdin"
+          ssh -i "$HOME/.ssh/tino_deploy" "$VPS_USER@$VPS_HOST" \
+            "TINO_IMAGE='$TINO_IMAGE' docker compose --env-file /opt/tino/.env -f /opt/tino/compose.vps.yaml config --quiet"
+          ssh -i "$HOME/.ssh/tino_deploy" "$VPS_USER@$VPS_HOST" \
+            "TINO_IMAGE='$TINO_IMAGE' /bin/sh -s" <<'REMOTE'
+          set -eu
+          cd /opt/tino
+          set -a
+          . ./.env
+          set +a
+          : "${TINO_API_HOST:?missing TINO_API_HOST}"
+          : "${TINO_AUTH_HOST:?missing TINO_AUTH_HOST}"
+          : "${TINO_VPS_IPV4:?missing TINO_VPS_IPV4}"
+          for host in "$TINO_API_HOST" "$TINO_AUTH_HOST"; do
+            resolved="$(getent ahostsv4 "$host" | awk 'NR == 1 {print $1}')"
+            test "$resolved" = "$TINO_VPS_IPV4" || {
+              echo "DNS $host does not resolve to the configured VPS address" >&2
+              exit 20
+            }
+          done
+          for port in 80 443; do
+            if ss -ltnH "( sport = :$port )" | grep -q .; then
+              owned="$(docker ps --filter label=com.docker.compose.project=tino --format '{{.Ports}}' | grep -E "(^|[ ,])[^ ]*:$port->" || true)"
+              test -n "$owned" || {
+                echo "Port $port is already occupied by a non-TINO service; aborting without stopping anything" >&2
+                exit 21
+              }
+            fi
+          done
+          docker compose --env-file /opt/tino/.env -f /opt/tino/compose.vps.yaml pull app
+          docker compose --env-file /opt/tino/.env -f /opt/tino/compose.vps.yaml up -d --no-build --remove-orphans
+          docker compose --env-file /opt/tino/.env -f /opt/tino/compose.vps.yaml ps
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error "https://$TINO_API_HOST/actuator/health/readiness" >/dev/null; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo 'TINO readiness check failed' >&2
+          docker compose --env-file /opt/tino/.env -f /opt/tino/compose.vps.yaml ps
+          exit 22
+          REMOTE
+          ssh -i "$HOME/.ssh/tino_deploy" "$VPS_USER@$VPS_HOST" 'docker logout ghcr.io >/dev/null 2>&1 || true'
