@@ -7,6 +7,26 @@ Este documento descreve como o aplicativo Android deve consumir o TINO. O
 aplicativo conversa somente com o backend TINO; ele não chama a API da Doces &
 Sonhos diretamente.
 
+## Autenticação TINO por celular
+
+O fluxo de produto usa celular + OTP enviado pelo WhatsApp. O app não deve
+exibir a tela padrão `Username or email / Password` do Keycloak. A ativação é:
+
+```text
+CONTINUAR → POST /api/v1/auth/otp/challenges
+          → tela Compose nativa de 6 dígitos
+          → POST /api/v1/auth/otp/challenges/{id}/verify
+          → verification_ticket de uso único
+          → Authorization Code + PKCE no Keycloak
+          → access/refresh token OIDC
+```
+
+O `verification_ticket` não é token TINO e nunca deve ser salvo em log ou
+armazenamento durável. O Android envia o ticket somente no início da autorização
+OIDC; depois usa o access token no backend normalmente. Os endpoints de OTP
+retornam erros distintos para código inválido, expirado, bloqueado, cooldown e
+provider indisponível, sem revelar se uma conta existe.
+
 ## URLs do ambiente VPS
 
 ```text

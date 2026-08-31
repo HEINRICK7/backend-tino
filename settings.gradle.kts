@@ -31,6 +31,7 @@ include(
     "modules:receiving",
     "modules:inventory",
     "modules:external",
+    "keycloak-extension",
     "shared:kernel",
     "shared:infrastructure",
 )

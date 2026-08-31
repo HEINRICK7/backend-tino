@@ -1,11 +1,40 @@
 {
   "realm": "tino",
   "enabled": true,
+  "authenticationFlows": [
+    {
+      "alias": "tino-otp-browser",
+      "description": "Passwordless browser flow for the TINO Android client",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "tino-otp-ticket",
+          "authenticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "userSetupAllowed": false
+        }
+      ]
+    }
+  ],
+  "browserFlow": "tino-otp-browser",
+  "requiredActions": [
+    {
+      "alias": "VERIFY_PROFILE",
+      "name": "Verify Profile",
+      "providerId": "VERIFY_PROFILE",
+      "enabled": false,
+      "defaultAction": false,
+      "priority": 90
+    }
+  ],
   "clients": [
     {
       "clientId": "tino-android",
       "publicClient": true,
-      "directAccessGrantsEnabled": true,
+      "directAccessGrantsEnabled": false,
       "standardFlowEnabled": true,
       "redirectUris": ["tino://oauth/callback"]
     }
