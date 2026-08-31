@@ -30,6 +30,7 @@ include(
     "modules:catalog",
     "modules:receiving",
     "modules:inventory",
+    "modules:external",
     "shared:kernel",
     "shared:infrastructure",
 )

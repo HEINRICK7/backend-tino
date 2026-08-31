@@ -22,6 +22,7 @@ import java.net.http.HttpClient;
 import java.time.Clock;
 import java.time.Duration;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import tools.jackson.databind.ObjectMapper;
@@ -33,7 +34,7 @@ public class FiscalConfiguration {
     HttpClient serproHttpClient() { return HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build(); }
 
     @Bean
-    SerproOAuthClient serproOAuthClient(HttpClient client, ObjectMapper mapper, Clock clock,
+    SerproOAuthClient serproOAuthClient(@Qualifier("serproHttpClient") HttpClient client, ObjectMapper mapper, Clock clock,
             @Value("${tino.fiscal.serpro.token-url:https://gateway.apiserpro.serpro.gov.br/token}") String tokenUrl,
             @Value("${tino.fiscal.serpro.consumer-key:}") String key,
             @Value("${tino.fiscal.serpro.consumer-secret:}") String secret,
@@ -48,7 +49,7 @@ public class FiscalConfiguration {
     NfeMetrics nfeMetrics(MeterRegistry registry) { return new NfeMetrics(registry); }
 
     @Bean
-    NfeRetrievalPort nfeRetrievalPort(HttpClient client, SerproOAuthClient oauth, NfeParser parser, NfeMetrics metrics,
+    NfeRetrievalPort nfeRetrievalPort(@Qualifier("serproHttpClient") HttpClient client, SerproOAuthClient oauth, NfeParser parser, NfeMetrics metrics,
             @Value("${tino.fiscal.serpro.base-url:https://gateway.apiserpro.serpro.gov.br/consulta-nfe-df-trial/api/v1}") String baseUrl,
             @Value("${tino.fiscal.serpro.request-tag:tino-nfe}") String requestTag,
             @Value("${tino.fiscal.serpro.timeout:PT10S}") Duration timeout,

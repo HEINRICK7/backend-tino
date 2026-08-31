@@ -2,6 +2,8 @@ package com.tino.backend.catalog.adapter.out.persistence;
 
 import com.tino.backend.catalog.application.model.ProductResolution;
 import com.tino.backend.catalog.application.model.ProductSearchItem;
+import com.tino.backend.catalog.application.model.ExternalProductProjection;
+import com.tino.backend.catalog.application.model.ExternalProductProjectionResult;
 import com.tino.backend.catalog.application.port.out.ProductCatalog;
 import com.tino.backend.fiscal.domain.model.CanonicalNfeItem;
 import com.tino.backend.shared.kernel.BusinessId;
@@ -25,6 +27,8 @@ public class JooqProductCatalog implements ProductCatalog {
     private static final Table<?> IDENTIFIERS = table("product_identifiers");
     private static final Table<?> MAPPINGS = table("supplier_product_mappings");
     private static final Table<?> CONVERSIONS = table("packaging_conversions");
+    private static final Table<?> EXTERNAL_MAPPINGS = table("external_product_mappings");
+    private static final Table<?> EXTERNAL_OPTIONS = table("external_product_price_options");
     private static final Field<UUID> ID = field("id", UUID.class);
     private static final Field<UUID> BUSINESS_ID = field("business_id", UUID.class);
     private static final Field<String> NAME = field("name", String.class);
@@ -39,6 +43,7 @@ public class JooqProductCatalog implements ProductCatalog {
     private static final Field<String> STATUS = field("status", String.class);
     private static final Field<OffsetDateTime> CREATED_AT = field("created_at", OffsetDateTime.class);
     private static final Field<OffsetDateTime> UPDATED_AT = field("updated_at", OffsetDateTime.class);
+    private static final Field<BigDecimal> SALE_PRICE = field("sale_price", BigDecimal.class);
     private static final Field<UUID> PRODUCTS_ID = qualified("products", "id", UUID.class);
     private static final Field<UUID> PRODUCTS_BUSINESS_ID = qualified("products", "business_id", UUID.class);
     private static final Field<String> PRODUCTS_NAME = qualified("products", "name", String.class);
@@ -128,6 +133,53 @@ public class JooqProductCatalog implements ProductCatalog {
                                 .and(IDENTIFIERS_PRODUCT_ID.eq(row.get(PRODUCTS_ID)))
                                 .and(IDENTIFIERS_TYPE.eq("GTIN")))
                         .orderBy(ID.asc()).limit(1).fetchOptional(VALUE).orElse(null)));
+    }
+
+    @Override
+    public ExternalProductProjectionResult upsertExternalProduct(BusinessId businessId, ExternalProductProjection projection) {
+        var now = time(projection.syncedAt());
+        var productId = stableExternalProductId(businessId, projection.providerConnectionId(), projection.externalId());
+        var mappingBusiness = field("business_id", UUID.class);
+        var mappingConnection = field("provider_connection_id", UUID.class);
+        var mappingExternalId = field("external_product_id", String.class);
+        var wasPresent = dsl.fetchExists(dsl.selectOne().from(EXTERNAL_MAPPINGS)
+                .where(mappingBusiness.eq(businessId.value()).and(mappingConnection.eq(projection.providerConnectionId()))
+                        .and(mappingExternalId.eq(projection.externalId()))));
+        dsl.insertInto(PRODUCTS).columns(ID, BUSINESS_ID, NAME, BASE_UNIT, SALE_PRICE, STATUS, CREATED_AT, UPDATED_AT)
+                .values(productId, businessId.value(), projection.name(), projection.unitRaw(), projection.defaultPrice(),
+                        projection.active() ? "ACTIVE" : "ARCHIVED", now, now)
+                .onConflict(BUSINESS_ID, ID).doNothing().execute();
+        dsl.update(PRODUCTS).set(NAME, projection.name()).set(BASE_UNIT, projection.unitRaw())
+                .set(SALE_PRICE, projection.defaultPrice()).set(STATUS, projection.active() ? "ACTIVE" : "ARCHIVED")
+                .set(UPDATED_AT, now).where(BUSINESS_ID.eq(businessId.value()).and(ID.eq(productId))).execute();
+        dsl.insertInto(EXTERNAL_MAPPINGS)
+                .columns(ID, mappingBusiness, mappingConnection, mappingExternalId, field("tino_product_id", UUID.class),
+                        field("external_updated_at", OffsetDateTime.class), field("last_synced_at", OffsetDateTime.class), UPDATED_AT)
+                .values(UUID.randomUUID(), businessId.value(), projection.providerConnectionId(), projection.externalId(), productId,
+                        time(projection.externalUpdatedAt()), now, now)
+                .onConflict(mappingBusiness, mappingConnection, mappingExternalId).doUpdate()
+                .set(field("tino_product_id", UUID.class), productId)
+                .set(field("external_updated_at", OffsetDateTime.class), time(projection.externalUpdatedAt()))
+                .set(field("last_synced_at", OffsetDateTime.class), now)
+                .set(UPDATED_AT, now).execute();
+        dsl.deleteFrom(EXTERNAL_OPTIONS).where(mappingBusiness.eq(businessId.value())
+                .and(mappingConnection.eq(projection.providerConnectionId())).and(mappingExternalId.eq(projection.externalId()))).execute();
+        for (var option : projection.priceOptions()) {
+            dsl.insertInto(EXTERNAL_OPTIONS).columns(ID, mappingBusiness, mappingConnection, mappingExternalId,
+                    field("external_option_id", String.class), field("label", String.class), field("quantity", BigDecimal.class),
+                    field("unit", String.class), field("unit_raw", String.class), field("price", BigDecimal.class),
+                    field("is_default", Boolean.class), field("category_context", String.class),
+                    field("subcategory_context", String.class), UPDATED_AT)
+                    .values(UUID.randomUUID(), businessId.value(), projection.providerConnectionId(), projection.externalId(),
+                            option.externalId(), option.label(), option.quantity(), option.unit(), option.unitRaw(), option.price(),
+                            option.defaultOption(), projection.categoryContext(), projection.subcategoryContext(), now).execute();
+        }
+        return new ExternalProductProjectionResult(productId, !wasPresent, wasPresent, wasPresent && !projection.active());
+    }
+
+    private static UUID stableExternalProductId(BusinessId businessId, UUID connectionId, String externalId) {
+        return UUID.nameUUIDFromBytes(("tino:external-product:" + businessId.value() + ":" + connectionId + ":" + externalId)
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
     private static String usableGtin(String value) { if (value == null || value.isBlank() || value.equalsIgnoreCase("SEM GTIN")) return null; var v = value.replaceAll("\\D", ""); return v.matches("(?:\\d{8}|\\d{12,14})") && validGtin(v) ? v : null; }

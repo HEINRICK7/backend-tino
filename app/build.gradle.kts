@@ -21,6 +21,7 @@ dependencies {
     implementation(project(":modules:catalog"))
     implementation(project(":modules:receiving"))
     implementation(project(":modules:inventory"))
+    implementation(project(":modules:external"))
 
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.validation)
