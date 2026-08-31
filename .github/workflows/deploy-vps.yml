@@ -100,10 +100,31 @@ jobs:
           set -euo pipefail
           test -n "$VPS_HOST"
           test -n "$VPS_USER"
-          ssh -i "$HOME/.ssh/tino_deploy" "$VPS_USER@$VPS_HOST" 'install -d -m 700 /opt/tino'
-          scp -i "$HOME/.ssh/tino_deploy" deploy/compose.vps.yaml "$VPS_USER@$VPS_HOST:/opt/tino/compose.vps.yaml"
-          scp -i "$HOME/.ssh/tino_deploy" docker/keycloak/tino-realm.json "$VPS_USER@$VPS_HOST:/opt/tino/tino-realm.json"
-          scp -i "$HOME/.ssh/tino_deploy" docker/postgres/init.sh "$VPS_USER@$VPS_HOST:/opt/tino/init.sh"
+          SSH_OPTS=(-4 -o BatchMode=yes -o ConnectTimeout=15 -o ConnectionAttempts=3 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 -i "$HOME/.ssh/tino_deploy")
+          retry_ssh() {
+            local attempt
+            for attempt in 1 2 3; do
+              if ssh "${SSH_OPTS[@]}" "$@"; then
+                return 0
+              fi
+              test "$attempt" -lt 3 && sleep $((attempt * 3))
+            done
+            return 1
+          }
+          retry_scp() {
+            local attempt
+            for attempt in 1 2 3; do
+              if scp "${SSH_OPTS[@]}" "$@"; then
+                return 0
+              fi
+              test "$attempt" -lt 3 && sleep $((attempt * 3))
+            done
+            return 1
+          }
+          retry_ssh "$VPS_USER@$VPS_HOST" 'install -d -m 700 /opt/tino'
+          retry_scp deploy/compose.vps.yaml "$VPS_USER@$VPS_HOST:/opt/tino/compose.vps.yaml"
+          retry_scp docker/keycloak/tino-realm.json "$VPS_USER@$VPS_HOST:/opt/tino/tino-realm.json"
+          retry_scp docker/postgres/init.sh "$VPS_USER@$VPS_HOST:/opt/tino/init.sh"
       - name: Deploy without stopping other Compose projects
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
@@ -115,11 +136,22 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$TINO_ENV_FILE"
-          printf '%s\n' "$TINO_ENV_FILE" | ssh -i "$HOME/.ssh/tino_deploy" "$VPS_USER@$VPS_HOST" 'umask 077; cat > /opt/tino/.env'
-          printf '%s' "$GHCR_TOKEN" | ssh -i "$HOME/.ssh/tino_deploy" "$VPS_USER@$VPS_HOST" "docker login ghcr.io --username '$GHCR_USER' --password-stdin"
-          ssh -i "$HOME/.ssh/tino_deploy" "$VPS_USER@$VPS_HOST" \
+          SSH_OPTS=(-4 -o BatchMode=yes -o ConnectTimeout=15 -o ConnectionAttempts=3 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 -i "$HOME/.ssh/tino_deploy")
+          retry_ssh() {
+            local attempt
+            for attempt in 1 2 3; do
+              if ssh "${SSH_OPTS[@]}" "$@"; then
+                return 0
+              fi
+              test "$attempt" -lt 3 && sleep $((attempt * 3))
+            done
+            return 1
+          }
+          printf '%s\n' "$TINO_ENV_FILE" | retry_ssh "$VPS_USER@$VPS_HOST" 'umask 077; cat > /opt/tino/.env'
+          printf '%s' "$GHCR_TOKEN" | retry_ssh "$VPS_USER@$VPS_HOST" "docker login ghcr.io --username '$GHCR_USER' --password-stdin"
+          retry_ssh "$VPS_USER@$VPS_HOST" \
             "TINO_IMAGE='$TINO_IMAGE' docker compose --env-file /opt/tino/.env -f /opt/tino/compose.vps.yaml config --quiet"
-          ssh -i "$HOME/.ssh/tino_deploy" "$VPS_USER@$VPS_HOST" \
+          retry_ssh "$VPS_USER@$VPS_HOST" \
             "TINO_IMAGE='$TINO_IMAGE' /bin/sh -s" <<'REMOTE'
           set -eu
           cd /opt/tino
@@ -158,4 +190,4 @@ jobs:
           docker compose --env-file /opt/tino/.env -f /opt/tino/compose.vps.yaml ps
           exit 22
           REMOTE
-          ssh -i "$HOME/.ssh/tino_deploy" "$VPS_USER@$VPS_HOST" 'docker logout ghcr.io >/dev/null 2>&1 || true'
+          retry_ssh "$VPS_USER@$VPS_HOST" 'docker logout ghcr.io >/dev/null 2>&1 || true'
