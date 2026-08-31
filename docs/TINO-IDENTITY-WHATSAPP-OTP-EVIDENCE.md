@@ -1,6 +1,6 @@
 # TINO — Identity WhatsApp OTP — Evidence
 
-Status: **PASS_LOCAL_E2E_PENDING_VPS_AND_DEVICE_SMOKE**
+Status: **PASS_VPS_DEPLOYED_PENDING_REAL_OTP_AND_DEVICE_SMOKE**
 
 ## Incidente de origem
 
@@ -31,11 +31,18 @@ Status: **PASS_LOCAL_E2E_PENDING_VPS_AND_DEVICE_SMOKE**
 
 ## Gates pendentes
 
-- não há sessão/credencial real do wa-evolution disponível neste workspace;
+- falta executar uma solicitação OTP real com um número de teste autorizado;
+  as credenciais de runtime estão configuradas na VPS e o delivery está ativo;
 - o smoke Android físico/emulador até `bootstrap → READY` ainda não foi
   executado;
-- a VPS pública ainda responde com a versão anterior no endpoint OTP;
-- o delivery físico wa-evolution/WhatsApp depende de credenciais de runtime.
+- F7/Produção continua explicitamente bloqueado.
+
+O deploy de `main` no commit `bc6cc34` passou pelo workflow `33450155521`.
+Na VPS, `tino-app`, `tino-keycloak` e `tino-otp-delivery` estão ativos; o
+configurador do Browser Flow terminou com exit `0`. A readiness pública retorna
+HTTP 200 e uma chamada pre-auth sem bearer, usando telefone inválido, retorna
+HTTP 400 `INVALID_OTP_REQUEST`, confirmando que o endpoint de início está
+acessível sem sessão e sem enviar mensagem.
 
 O fluxo Keycloak foi validado localmente com a imagem real do servidor e um
 delivery fake controlado: ticket válido produziu callback OIDC e code exchange

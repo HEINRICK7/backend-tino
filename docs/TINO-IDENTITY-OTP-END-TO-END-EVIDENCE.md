@@ -1,7 +1,7 @@
 # TINO — Identity OTP: evidência ponta a ponta
 
 Data: 2026-08-31
-Status: **PASS_LOCAL_E2E_PENDING_VPS_AND_DEVICE_SMOKE**
+Status: **PASS_VPS_DEPLOYED_PENDING_REAL_OTP_AND_DEVICE_SMOKE**
 
 ## Escopo comprovado
 
@@ -58,6 +58,10 @@ Android contract
 | ticket válido → callback `tino://oauth/callback` | PASS |
 | code verifier PKCE inválido | REJEITADO com `invalid_grant` |
 | code exchange válido | PASS, access/refresh token emitidos |
+| deploy `main` / commit `bc6cc34` | PASS, workflow `33450155521` |
+| VPS readiness `https://api.tino.otimizanegocio.com/actuator/health/readiness` | HTTP 200 |
+| pre-auth sem bearer com telefone inválido | HTTP 400 `INVALID_OTP_REQUEST` |
+| `otp-delivery` + Evolution network | PASS, provider configurado e serviço ativo |
 
 ## Arquivos principais
 
@@ -73,15 +77,12 @@ Android contract
 
 ## Gates ainda abertos
 
-1. O domínio público `api.tino.otimizanegocio.com` ainda está rodando uma
-   versão anterior: uma chamada sem bearer ao endpoint OTP respondeu `401`,
-   portanto o novo endpoint não foi publicado na VPS nesta execução.
-2. O delivery real wa-evolution/WhatsApp ainda depende das credenciais de
-   runtime e não foi usado como prova de entrega.
-3. Falta o smoke em Android físico/emulador até `bootstrap → READY`.
-4. A operação de Produção/F7 continua bloqueada.
+1. Falta executar uma solicitação OTP real com um número de teste autorizado;
+   as credenciais de runtime estão configuradas e o delivery está ativo, mas
+   nenhuma mensagem foi enviada sem um destinatário explicitamente autorizado.
+2. Falta o smoke em Android físico/emulador até `bootstrap → READY`.
+3. A operação de Produção/F7 continua bloqueada.
 
-Nenhum desses gates foi marcado como PASS por inferência. O próximo passo
-seguro é publicar os commits no pipeline autorizado, conferir o realm existente
-com o job `keycloak-otp-config`, configurar os secrets de runtime e executar o
-smoke real no dispositivo.
+Nenhum desses gates foi marcado como PASS por inferência. O próximo passo é
+executar o smoke real com um número autorizado, conferir o callback no Android
+e concluir `bootstrap → READY` no dispositivo.
