@@ -90,6 +90,7 @@ class NfeAndroidContractHttpApiTest {
         var schemas = root.path("components").path("schemas");
         assertThat(schemas.has("ProductResolutionStatus")).isTrue();
         assertThat(schemas.has("DecisionAction")).isTrue();
+        assertThat(schemas.path("ProductSearchItem").path("properties").has("price")).isTrue();
         var preview = schemas.path("PreviewResponse");
         assertThat(preview.path("properties").path("status").path("enum").toString())
                 .contains("REVIEW_REQUIRED", "CONFIRMED");

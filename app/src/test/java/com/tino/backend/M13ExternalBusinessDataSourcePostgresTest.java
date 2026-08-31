@@ -76,6 +76,8 @@ class M13ExternalBusinessDataSourcePostgresTest {
         assertThat(first.created()).isTrue();
         assertThat(replay.created()).isFalse();
         assertThat(tenants.execute(business, () -> dsl.fetchCount(org.jooq.impl.DSL.table(org.jooq.impl.DSL.name("public", "products"))))).isEqualTo(1);
+        assertThat(tenants.execute(business, () -> catalog.search(business, "Bolo", null, 50)))
+                .singleElement().satisfies(item -> assertThat(item.price()).isEqualByComparingTo("50.00"));
         assertThat(tenants.execute(new BusinessId(BUSINESS_B), () -> dsl.fetchCount(org.jooq.impl.DSL.table(org.jooq.impl.DSL.name("public", "products"))))).isZero();
         assertThat(tenants.execute(new BusinessId(BUSINESS_B), () -> connections.list(new BusinessId(BUSINESS_B)))).isEmpty();
     }

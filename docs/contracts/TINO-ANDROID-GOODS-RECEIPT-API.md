@@ -148,14 +148,17 @@ costs to integers or binary floating-point for business calculations.
     "product_id": "uuid",
     "name": "SULFITE A4 75GR BOREAL (5000FLS)",
     "base_unit": "RS",
-    "gtin": "7891234567895"
+    "gtin": "7891234567895",
+    "price": 50.00
   }
 ]
 ```
 
 Search is active-product, tenant- and membership-scoped, bounded to 1–100
 results (default 50), and accepts text (`q`) or an applicable GTIN. It is a
-small explicit-selection API, not an ERP catalog API.
+small explicit-selection API, not an ERP catalog API. `price` is the current
+operational sale price (the default external price option); it is `null` when
+the product has no configured sale price.
 
 ### GoodsReceiptResult
 

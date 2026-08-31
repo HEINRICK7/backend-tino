@@ -124,7 +124,7 @@ public class JooqProductCatalog implements ProductCatalog {
                             .and(IDENTIFIERS_TYPE.eq("GTIN"))
                             .and(IDENTIFIERS_VALUE.eq(normalizedGtin)))));
         }
-        var rows = dsl.select(PRODUCTS_ID, PRODUCTS_NAME, PRODUCTS_BASE_UNIT)
+        var rows = dsl.select(PRODUCTS_ID, PRODUCTS_NAME, PRODUCTS_BASE_UNIT, SALE_PRICE)
                 .from(PRODUCTS).where(condition)
                 .orderBy(PRODUCTS_NAME.asc(), PRODUCTS_ID.asc()).limit(limit).fetch();
         return rows.map(row -> new ProductSearchItem(row.get(PRODUCTS_ID), row.get(PRODUCTS_NAME),
@@ -132,7 +132,7 @@ public class JooqProductCatalog implements ProductCatalog {
                         .where(IDENTIFIERS_BUSINESS_ID.eq(businessId.value())
                                 .and(IDENTIFIERS_PRODUCT_ID.eq(row.get(PRODUCTS_ID)))
                                 .and(IDENTIFIERS_TYPE.eq("GTIN")))
-                        .orderBy(ID.asc()).limit(1).fetchOptional(VALUE).orElse(null)));
+                        .orderBy(ID.asc()).limit(1).fetchOptional(VALUE).orElse(null), row.get(SALE_PRICE)));
     }
 
     @Override
