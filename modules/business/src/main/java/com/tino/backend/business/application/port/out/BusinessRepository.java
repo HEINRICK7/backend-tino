@@ -1,6 +1,7 @@
 package com.tino.backend.business.application.port.out;
 
 import com.tino.backend.business.domain.model.Business;
+import com.tino.backend.business.domain.model.BusinessDataSourceType;
 import com.tino.backend.business.domain.model.BusinessMembership;
 import com.tino.backend.shared.kernel.BusinessId;
 import java.util.Collection;
@@ -15,4 +16,9 @@ public interface BusinessRepository {
     Optional<Business> findById(BusinessId businessId);
 
     List<Business> findByIds(Collection<BusinessId> businessIds);
+
+    /** Changes the explicit source selected for a Business. */
+    default void updateDataSource(BusinessId businessId, BusinessDataSourceType sourceType) {
+        throw new UnsupportedOperationException("business data source update is not supported");
+    }
 }

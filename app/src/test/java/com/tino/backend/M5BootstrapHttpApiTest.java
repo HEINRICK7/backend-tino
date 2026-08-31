@@ -205,7 +205,7 @@ class M5BootstrapHttpApiTest {
         var selected = body.path("selected_business");
 
         assertThat(selected.fieldNames()).toIterable()
-                .containsExactlyInAnyOrder("id", "trade_name", "vertical", "status", "role");
+                .containsExactlyInAnyOrder("id", "trade_name", "vertical", "status", "role", "data_source_type");
     }
 
     @Test

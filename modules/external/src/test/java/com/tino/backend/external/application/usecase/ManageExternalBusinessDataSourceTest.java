@@ -3,6 +3,7 @@ package com.tino.backend.external.application.usecase;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.tino.backend.business.application.port.in.BusinessAuthorization;
+import com.tino.backend.business.application.port.in.BusinessDataSourceConfiguration;
 import com.tino.backend.catalog.application.model.ExternalProductProjection;
 import com.tino.backend.catalog.application.model.ExternalProductProjectionResult;
 import com.tino.backend.catalog.application.model.ProductResolution;
@@ -26,6 +27,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.HashMap;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
@@ -34,6 +36,56 @@ class ManageExternalBusinessDataSourceTest {
     private static final BusinessId BUSINESS = new BusinessId(UUID.fromString("01a04d7c-a223-757f-8a96-861ceefd8ec7"));
     private static final UUID CONNECTION_ID = UUID.fromString("01a04d7c-a223-757f-8a96-861ceefd8ec8");
     private static final Instant NOW = Instant.parse("2026-08-30T12:00:00Z");
+
+    @Test
+    void sourceSelectionIsExplicitAndReplaySafe() {
+        var connections = new InMemoryConnectionRepository();
+        var businesses = new InMemoryBusinessDataSource();
+        var service = service(connections, businesses);
+
+        var selected = service.configure(UUID.randomUUID(), BUSINESS, ExternalDataSourceType.EXTERNAL_API, "DOCES_SONHOS");
+        var replay = service.configure(UUID.randomUUID(), BUSINESS, ExternalDataSourceType.EXTERNAL_API, "DOCES_SONHOS");
+
+        assertThat(selected.sourceType()).isEqualTo(ExternalDataSourceType.EXTERNAL_API);
+        assertThat(selected.provider()).isEqualTo("DOCES_SONHOS");
+        assertThat(replay.connectionId()).isEqualTo(selected.connectionId());
+        assertThat(connections.list(BUSINESS)).hasSize(1);
+        assertThat(businesses.readSourceType(BUSINESS)).isEqualTo(ExternalDataSourceType.EXTERNAL_API.name());
+    }
+
+    @Test
+    void nativeSelectionDoesNotCreateAnExternalConnection() {
+        var connections = new InMemoryConnectionRepository();
+        var businesses = new InMemoryBusinessDataSource();
+        var selected = service(connections, businesses).configure(
+                UUID.randomUUID(), BUSINESS, ExternalDataSourceType.TINO_NATIVE, null);
+
+        assertThat(selected.sourceType()).isEqualTo(ExternalDataSourceType.TINO_NATIVE);
+        assertThat(selected.provider()).isNull();
+        assertThat(selected.connectionId()).isNull();
+        assertThat(connections.list(BUSINESS)).isEmpty();
+    }
+
+    @Test
+    void unknownProviderCannotBeSelected() {
+        var service = service(new InMemoryConnectionRepository(), new InMemoryBusinessDataSource());
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.configure(
+                        UUID.randomUUID(), BUSINESS, ExternalDataSourceType.EXTERNAL_API, "UNKNOWN"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    private static ManageExternalBusinessDataSource service(
+            InMemoryConnectionRepository connections, InMemoryBusinessDataSource businesses) {
+        return new ManageExternalBusinessDataSource(
+                new BusinessAuthorization() {
+                    @Override public <T> T execute(UUID user, BusinessId business, Function<BusinessId, T> operation) { return operation.apply(business); }
+                },
+                new TenantContextExecutor() {
+                    @Override public <T> T execute(BusinessId business, Supplier<T> operation) { return operation.get(); }
+                }, connections, new InMemoryProductCatalog(), List.of(new TestProvider()),
+                Clock.fixed(NOW, ZoneOffset.UTC), businesses);
+    }
 
     @Test
     void paginatesAdvancesCursorAfterEachSuccessfulPageAndReplaysWithoutProductDuplication() {
@@ -91,9 +143,14 @@ class ManageExternalBusinessDataSourceTest {
     private static final class InMemoryConnectionRepository implements ExternalBusinessConnectionRepository {
         private ExternalBusinessConnection connection;
         private final List<String> cursors = new ArrayList<>();
-        @Override public ExternalBusinessConnection create(BusinessId businessId, String provider, Instant now) { return connection; }
+        @Override public ExternalBusinessConnection create(BusinessId businessId, String provider, Instant now) {
+            connection = new ExternalBusinessConnection(CONNECTION_ID, businessId, provider,
+                    ExternalConnectionStatus.CONNECTED, ExternalDataSourceType.EXTERNAL_API,
+                    null, null, null, null, null, 0, 0, 0, 0, 0, now, now);
+            return connection;
+        }
         @Override public Optional<ExternalBusinessConnection> find(BusinessId businessId, UUID id) { return Optional.ofNullable(connection); }
-        @Override public List<ExternalBusinessConnection> list(BusinessId businessId) { return List.of(connection); }
+        @Override public List<ExternalBusinessConnection> list(BusinessId businessId) { return connection == null ? List.of() : List.of(connection); }
         @Override public ExternalBusinessConnection markSyncing(BusinessId businessId, UUID id, Instant now) {
             connection = copy(ExternalConnectionStatus.SYNCING, connection.syncCursor(), null);
             return connection;
@@ -122,6 +179,13 @@ class ManageExternalBusinessDataSourceTest {
             return new ExternalBusinessConnection(CONNECTION_ID, BUSINESS, "DOCES_SONHOS", status, ExternalDataSourceType.EXTERNAL_API,
                     finished, cursor, NOW, finished, null, received, created, updated, deactivated, rejected, NOW, NOW);
         }
+    }
+
+    private static final class InMemoryBusinessDataSource implements BusinessDataSourceConfiguration {
+        private final HashMap<BusinessId, String> values = new HashMap<>();
+        private InMemoryBusinessDataSource() { values.put(BUSINESS, ExternalDataSourceType.TINO_NATIVE.name()); }
+        @Override public String readSourceType(BusinessId businessId) { return values.get(businessId); }
+        @Override public void updateSourceType(BusinessId businessId, String sourceType) { values.put(businessId, sourceType); }
     }
 
     private static final class InMemoryProductCatalog implements ProductCatalog {

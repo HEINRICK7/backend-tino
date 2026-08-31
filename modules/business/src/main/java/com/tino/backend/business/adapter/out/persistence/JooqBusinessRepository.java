@@ -6,6 +6,7 @@ import com.tino.backend.business.application.port.out.DuplicateMembershipExcepti
 import com.tino.backend.business.domain.model.Business;
 import com.tino.backend.business.domain.model.BusinessMembership;
 import com.tino.backend.business.domain.model.BusinessName;
+import com.tino.backend.business.domain.model.BusinessDataSourceType;
 import com.tino.backend.business.domain.model.BusinessStatus;
 import com.tino.backend.business.domain.model.BusinessVertical;
 import com.tino.backend.business.domain.model.MembershipStatus;
@@ -43,6 +44,8 @@ public class JooqBusinessRepository implements BusinessRepository {
             DSL.field(DSL.name("vertical"), String.class);
     private static final Field<String> BUSINESS_STATUS =
             DSL.field(DSL.name("status"), String.class);
+    private static final Field<String> DATA_SOURCE_TYPE =
+            DSL.field(DSL.name("data_source_type"), String.class);
     private static final Field<OffsetDateTime> CREATED_AT =
             DSL.field(DSL.name("created_at"), OffsetDateTime.class);
     private static final Field<OffsetDateTime> UPDATED_AT =
@@ -107,7 +110,7 @@ public class JooqBusinessRepository implements BusinessRepository {
     @Transactional(readOnly = true)
     public Optional<Business> findById(BusinessId businessId) {
         try {
-            return dsl.select(BUSINESS_ID, TRADE_NAME, VERTICAL, BUSINESS_STATUS, CREATED_AT, UPDATED_AT)
+            return dsl.select(BUSINESS_ID, TRADE_NAME, VERTICAL, BUSINESS_STATUS, DATA_SOURCE_TYPE, CREATED_AT, UPDATED_AT)
                     .from(BUSINESSES)
                     .where(BUSINESS_ID.eq(businessId.value()))
                     .fetchOptional()
@@ -127,7 +130,7 @@ public class JooqBusinessRepository implements BusinessRepository {
         }
         try {
             var values = businessIds.stream().map(BusinessId::value).toList();
-            return dsl.select(BUSINESS_ID, TRADE_NAME, VERTICAL, BUSINESS_STATUS, CREATED_AT, UPDATED_AT)
+            return dsl.select(BUSINESS_ID, TRADE_NAME, VERTICAL, BUSINESS_STATUS, DATA_SOURCE_TYPE, CREATED_AT, UPDATED_AT)
                     .from(BUSINESSES)
                     .where(BUSINESS_ID.in(values))
                     .fetch()
@@ -139,6 +142,16 @@ public class JooqBusinessRepository implements BusinessRepository {
         }
     }
 
+    @Override
+    @Transactional
+    public void updateDataSource(BusinessId businessId, BusinessDataSourceType sourceType) {
+        dsl.update(BUSINESSES)
+                .set(DATA_SOURCE_TYPE, sourceType.name())
+                .set(UPDATED_AT, OffsetDateTime.now(ZoneOffset.UTC))
+                .where(BUSINESS_ID.eq(businessId.value()))
+                .execute();
+    }
+
     private static Business toBusiness(Record record) {
         try {
             return new Business(
@@ -146,6 +159,7 @@ public class JooqBusinessRepository implements BusinessRepository {
                     new BusinessName(record.get(TRADE_NAME, String.class)),
                     BusinessVertical.valueOf(record.get(VERTICAL, String.class)),
                     BusinessStatus.valueOf(record.get(BUSINESS_STATUS, String.class)),
+                    BusinessDataSourceType.valueOf(record.get(DATA_SOURCE_TYPE, String.class)),
                     toInstant(record.get(CREATED_AT, OffsetDateTime.class)),
                     toInstant(record.get(UPDATED_AT, OffsetDateTime.class)));
         } catch (RuntimeException exception) {

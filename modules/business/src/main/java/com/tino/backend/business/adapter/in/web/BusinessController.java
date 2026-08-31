@@ -72,7 +72,8 @@ public final class BusinessController {
                 business.tradeName().value(),
                 business.vertical(),
                 business.status(),
-                created.membership().role());
+                created.membership().role(),
+                business.dataSourceType());
     }
 
     private static BusinessResponse toResponse(AccessibleBusiness accessible) {
@@ -82,12 +83,14 @@ public final class BusinessController {
                 business.tradeName().value(),
                 business.vertical(),
                 business.status(),
-                accessible.role());
+                accessible.role(),
+                business.dataSourceType());
     }
 
     private static BusinessResponse toResponse(
-            UUID id, String tradeName, BusinessVertical vertical, BusinessStatus status, BusinessRole role) {
-        return new BusinessResponse(id, tradeName, vertical, status, role);
+            UUID id, String tradeName, BusinessVertical vertical, BusinessStatus status, BusinessRole role,
+            com.tino.backend.business.domain.model.BusinessDataSourceType dataSourceType) {
+        return new BusinessResponse(id, tradeName, vertical, status, role, dataSourceType);
     }
 
     public record CreateBusinessRequest(
@@ -99,5 +102,6 @@ public final class BusinessController {
             String tradeName,
             BusinessVertical vertical,
             BusinessStatus status,
-            BusinessRole role) {}
+            BusinessRole role,
+            com.tino.backend.business.domain.model.BusinessDataSourceType dataSourceType) {}
 }

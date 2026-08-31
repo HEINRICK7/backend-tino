@@ -343,8 +343,8 @@ class M3BusinessPostgresTest {
         try (var fresh = new M2PostgresTestContainer()) {
             fresh.start();
             var result = migrate(fresh).info();
-            assertThat(result.applied()).hasSize(15);
-            assertThat(result.current().getVersion().getVersion()).isEqualTo("14");
+            assertThat(result.applied()).hasSize(16);
+            assertThat(result.current().getVersion().getVersion()).isEqualTo("15");
         }
     }
 
@@ -378,7 +378,7 @@ class M3BusinessPostgresTest {
     @Test
     void persistenceSchemaIsMinimalAndControlPlaneHasNoCircularRls() throws Exception {
         assertThat(columns("businesses")).containsExactly(
-                "id", "trade_name", "vertical", "status", "created_at", "updated_at");
+                "id", "trade_name", "vertical", "status", "created_at", "updated_at", "data_source_type");
         assertThat(columns("business_memberships")).containsExactly(
                 "id", "business_id", "user_id", "role", "status", "created_at", "updated_at");
         assertThat(columns("businesses")).doesNotContain(
@@ -419,7 +419,7 @@ class M3BusinessPostgresTest {
         assertThat(currentUser(M2PostgresTestContainer.MIGRATOR)).isEqualTo(M2PostgresTestContainer.MIGRATOR);
         assertThat(hasTablePrivilege(M2PostgresTestContainer.APP, "businesses", "SELECT")).isTrue();
         assertThat(hasTablePrivilege(M2PostgresTestContainer.APP, "businesses", "INSERT")).isTrue();
-        assertThat(hasTablePrivilege(M2PostgresTestContainer.APP, "businesses", "UPDATE")).isFalse();
+        assertThat(hasTablePrivilege(M2PostgresTestContainer.APP, "businesses", "UPDATE")).isTrue();
         assertThat(hasTablePrivilege(M2PostgresTestContainer.APP, "businesses", "DELETE")).isFalse();
         assertThat(hasTablePrivilege(M2PostgresTestContainer.APP, "business_memberships", "SELECT")).isTrue();
         assertThat(hasTablePrivilege(M2PostgresTestContainer.APP, "business_memberships", "INSERT")).isTrue();

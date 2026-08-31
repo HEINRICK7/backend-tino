@@ -9,12 +9,18 @@ public record AccessibleBusinessView(
         String tradeName,
         String vertical,
         String status,
-        String role) {
+        String role,
+        String dataSourceType) {
     public AccessibleBusinessView {
         Objects.requireNonNull(businessId, "businessId");
         Objects.requireNonNull(tradeName, "tradeName");
         Objects.requireNonNull(vertical, "vertical");
         Objects.requireNonNull(status, "status");
         Objects.requireNonNull(role, "role");
+        Objects.requireNonNull(dataSourceType, "dataSourceType");
+    }
+
+    public AccessibleBusinessView(UUID businessId, String tradeName, String vertical, String status, String role) {
+        this(businessId, tradeName, vertical, status, role, "TINO_NATIVE");
     }
 }

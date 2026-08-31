@@ -68,9 +68,10 @@ A tela possui comércio, nome do usuário, celular e vertical. O fluxo do botão
 1. autenticar o usuário no Keycloak;
 2. chamar `POST /api/v1/bootstrap`;
 3. se não houver empresa, criar a empresa;
-4. registrar a instalação do aparelho;
-5. chamar o bootstrap novamente;
-6. somente com estado `READY`, abrir a tela principal.
+4. definir explicitamente a origem de dados do Business;
+5. registrar a instalação do aparelho;
+6. chamar o bootstrap novamente;
+7. somente com estado `READY`, abrir a tela principal.
 
 ### 3.1 Consultar o contexto inicial
 
@@ -105,7 +106,7 @@ Content-Type: application/json
 }
 ```
 
-Verticais atuais: `RETAIL`, `BAKERY`, `RESTAURANT`, `COMMERCE` e `OTHER`.
+Verticais atuais: `RETAIL`, `BAKERY`, `RESTAURANT`, `STORE` e `OTHER`.
 
 O backend atualmente não possui endpoint de perfil para `nome` e `celular` do
 proprietário. O app não deve enviar esses campos para `POST /businesses`, pois
@@ -120,11 +121,49 @@ Resposta esperada:
   "trade_name": "Mercadinho São José",
   "vertical": "RETAIL",
   "status": "ACTIVE",
-  "role": "OWNER"
+  "role": "OWNER",
+  "data_source_type": "TINO_NATIVE"
 }
 ```
 
-### 3.3 Registrar a instalação do aparelho
+### 3.3 Definir a origem dos dados
+
+O app deve coletar uma escolha simples, sem inferir pelo nome do comércio:
+
+```text
+Você já usa algum sistema no seu comércio?
+[ Não, começar no TINO ]
+[ Sim, conectar meu sistema ]
+```
+
+Depois de criar ou selecionar o Business, enviar uma única vez:
+
+```http
+PUT /api/v1/businesses/{businessId}/data-source
+Authorization: Bearer <access_token>
+Content-Type: application/json
+
+{
+  "source_type": "TINO_NATIVE",
+  "provider": null
+}
+```
+
+Para a integração piloto:
+
+```json
+{
+  "source_type": "EXTERNAL_API",
+  "provider": "DOCES_SONHOS"
+}
+```
+
+O backend é a autoridade. Não usar `trade_name`, vertical, device ou
+`installation_id` para decidir a fonte. Em outro aparelho, reutilizar o mesmo
+`business_id` e consultar `GET /api/v1/businesses/{businessId}/data-source`;
+não selecionar novamente nem chamar a API Doces & Sonhos diretamente.
+
+### 3.4 Registrar a instalação do aparelho
 
 Gerar um identificador estável por instalação do app. Não usar um valor novo a
 cada abertura.
@@ -141,7 +180,7 @@ Content-Type: application/json
 
 O identificador não deve conter senha, token ou informação fiscal.
 
-### 3.4 Finalizar o bootstrap
+### 3.5 Finalizar o bootstrap
 
 ```http
 POST /api/v1/bootstrap

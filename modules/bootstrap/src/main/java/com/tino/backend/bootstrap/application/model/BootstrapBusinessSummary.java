@@ -9,12 +9,18 @@ public record BootstrapBusinessSummary(
         String tradeName,
         String vertical,
         String status,
-        String role) {
+        String role,
+        String dataSourceType) {
     public BootstrapBusinessSummary {
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(tradeName, "tradeName");
         Objects.requireNonNull(vertical, "vertical");
         Objects.requireNonNull(status, "status");
         Objects.requireNonNull(role, "role");
+        Objects.requireNonNull(dataSourceType, "dataSourceType");
+    }
+
+    public BootstrapBusinessSummary(UUID id, String tradeName, String vertical, String status, String role) {
+        this(id, tradeName, vertical, status, role, "TINO_NATIVE");
     }
 }

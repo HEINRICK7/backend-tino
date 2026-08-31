@@ -5,6 +5,7 @@ import com.tino.backend.business.application.port.in.BusinessAuthorization;
 import com.tino.backend.business.application.port.in.BusinessAccess;
 import com.tino.backend.business.application.port.in.BusinessAuthorizationDeniedException;
 import com.tino.backend.business.application.port.in.BusinessContextReader;
+import com.tino.backend.business.application.port.in.BusinessDataSourceConfiguration;
 import com.tino.backend.business.application.port.in.BusinessContextUnavailableException;
 import com.tino.backend.business.application.port.in.AccessibleBusinessView;
 import com.tino.backend.business.application.port.out.BusinessMembershipRepository;
@@ -55,6 +56,27 @@ public class BusinessConfiguration {
     }
 
     @Bean
+    BusinessDataSourceConfiguration businessDataSourceConfiguration(BusinessRepository businesses) {
+        return new BusinessDataSourceConfiguration() {
+            @Override
+            public String readSourceType(com.tino.backend.shared.kernel.BusinessId businessId) {
+                return businesses.findById(businessId).orElseThrow(() -> new IllegalArgumentException("business not found"))
+                        .dataSourceType().name();
+            }
+
+            @Override
+            public void updateSourceType(com.tino.backend.shared.kernel.BusinessId businessId, String sourceType) {
+                try {
+                    businesses.updateDataSource(businessId,
+                            com.tino.backend.business.domain.model.BusinessDataSourceType.valueOf(sourceType));
+                } catch (RuntimeException exception) {
+                    throw new IllegalArgumentException("unsupported business data source type", exception);
+                }
+            }
+        };
+    }
+
+    @Bean
     ExecuteAuthorizedBusinessOperation executeAuthorizedBusinessOperation(
             ResolveBusinessAccess access, TenantContextExecutor tenantContext) {
         return new ExecuteAuthorizedBusinessOperation(access, tenantContext);
@@ -92,6 +114,7 @@ public class BusinessConfiguration {
                 business.tradeName().value(),
                 business.vertical().name(),
                 business.status().name(),
-                accessible.role().name());
+                accessible.role().name(),
+                business.dataSourceType().name());
     }
 }

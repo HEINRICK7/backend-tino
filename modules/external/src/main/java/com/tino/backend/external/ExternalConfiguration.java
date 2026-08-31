@@ -1,6 +1,7 @@
 package com.tino.backend.external;
 
 import com.tino.backend.business.application.port.in.BusinessAuthorization;
+import com.tino.backend.business.application.port.in.BusinessDataSourceConfiguration;
 import com.tino.backend.catalog.application.port.out.ProductCatalog;
 import com.tino.backend.external.adapter.out.docessonhos.DocesSonhosCatalogAdapter;
 import com.tino.backend.external.application.port.out.ExternalBusinessConnectionRepository;
@@ -41,9 +42,10 @@ public class ExternalConfiguration {
             BusinessAuthorization authorization,
             TenantContextExecutor tenants,
             ExternalBusinessConnectionRepository connections,
+            BusinessDataSourceConfiguration businessDataSource,
             ProductCatalog catalog,
             List<ExternalCatalogProvider> providers,
             Clock clock) {
-        return new ManageExternalBusinessDataSource(authorization, tenants, connections, catalog, providers, clock);
+        return new ManageExternalBusinessDataSource(authorization, tenants, connections, catalog, providers, clock, businessDataSource);
     }
 }

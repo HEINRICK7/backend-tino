@@ -127,7 +127,8 @@ public final class ResolveBootstrapContext {
                 business.tradeName(),
                 business.vertical(),
                 business.status(),
-                business.role());
+                business.role(),
+                business.dataSourceType());
     }
 
     private static BootstrapInstallationSummary toInstallationSummary(

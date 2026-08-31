@@ -1,6 +1,7 @@
 package com.tino.backend.external.application.usecase;
 
 import com.tino.backend.business.application.port.in.BusinessAuthorization;
+import com.tino.backend.business.application.port.in.BusinessDataSourceConfiguration;
 import com.tino.backend.catalog.application.model.ExternalPriceOptionProjection;
 import com.tino.backend.catalog.application.model.ExternalProductProjection;
 import com.tino.backend.catalog.application.port.out.ProductCatalog;
@@ -19,6 +20,7 @@ import com.tino.backend.external.application.port.out.ExternalBusinessConnection
 import com.tino.backend.external.application.port.out.ExternalCatalogProvider;
 import com.tino.backend.external.domain.model.ExternalBusinessConnection;
 import com.tino.backend.external.domain.model.ExternalConnectionStatus;
+import com.tino.backend.external.domain.model.ExternalDataSourceType;
 import com.tino.backend.shared.kernel.BusinessId;
 import com.tino.backend.shared.kernel.TenantContextExecutor;
 import java.time.Clock;
@@ -31,13 +33,15 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.transaction.annotation.Transactional;
 
 /** Application orchestration for generic external catalog sources. */
-public final class ManageExternalBusinessDataSource {
+public class ManageExternalBusinessDataSource {
     private static final Logger LOG = LoggerFactory.getLogger(ManageExternalBusinessDataSource.class);
     private final BusinessAuthorization authorization;
     private final TenantContextExecutor tenants;
     private final ExternalBusinessConnectionRepository connections;
+    private final BusinessDataSourceConfiguration businessDataSource;
     private final ProductCatalog catalog;
     private final Map<String, ExternalCatalogProvider> providers;
     private final Clock clock;
@@ -45,9 +49,16 @@ public final class ManageExternalBusinessDataSource {
     public ManageExternalBusinessDataSource(BusinessAuthorization authorization, TenantContextExecutor tenants,
             ExternalBusinessConnectionRepository connections, ProductCatalog catalog,
             List<ExternalCatalogProvider> providers, Clock clock) {
+        this(authorization, tenants, connections, catalog, providers, clock, null);
+    }
+
+    public ManageExternalBusinessDataSource(BusinessAuthorization authorization, TenantContextExecutor tenants,
+            ExternalBusinessConnectionRepository connections, ProductCatalog catalog,
+            List<ExternalCatalogProvider> providers, Clock clock, BusinessDataSourceConfiguration businessDataSource) {
         this.authorization = Objects.requireNonNull(authorization);
         this.tenants = Objects.requireNonNull(tenants);
         this.connections = Objects.requireNonNull(connections);
+        this.businessDataSource = businessDataSource;
         this.catalog = Objects.requireNonNull(catalog);
         this.providers = providers.stream().collect(Collectors.toUnmodifiableMap(ExternalCatalogProvider::provider, Function.identity()));
         this.clock = Objects.requireNonNull(clock);
@@ -56,9 +67,39 @@ public final class ManageExternalBusinessDataSource {
     public ConnectionRegistrationResult register(UUID userId, BusinessId businessId, String provider) {
         requireProvider(provider);
         return authorization.execute(userId, businessId, ignored -> tenants.execute(businessId, () -> {
+            requireBusinessDataSource();
             var existing = connections.list(businessId).stream().filter(c -> provider.equals(c.provider())).findFirst();
-            if (existing.isPresent()) return new ConnectionRegistrationResult(existing.orElseThrow(), true);
-            return new ConnectionRegistrationResult(connections.create(businessId, provider, now()), false);
+            var result = existing.isPresent()
+                    ? new ConnectionRegistrationResult(existing.orElseThrow(), true)
+                    : new ConnectionRegistrationResult(connections.create(businessId, provider, now()), false);
+            businessDataSource.updateSourceType(businessId, ExternalDataSourceType.EXTERNAL_API.name());
+            return result;
+        }));
+    }
+
+    @Transactional
+    public BusinessDataSource configure(UUID userId, BusinessId businessId,
+            ExternalDataSourceType sourceType, String provider) {
+        Objects.requireNonNull(sourceType, "sourceType");
+        requireBusinessDataSource();
+        return authorization.execute(userId, businessId, ignored -> tenants.execute(businessId, () -> {
+            var current = connections.list(businessId);
+            if (sourceType == ExternalDataSourceType.TINO_NATIVE) {
+                if (provider != null && !provider.isBlank()) {
+                    throw new IllegalArgumentException("provider is only valid for EXTERNAL_API");
+                }
+                if (!current.isEmpty()) {
+                    throw new IllegalStateException("cannot select TINO_NATIVE while an external connection exists");
+                }
+                businessDataSource.updateSourceType(businessId, sourceType.name());
+                return nativeSource(businessId);
+            }
+            requireProvider(provider);
+            var connection = current.stream().filter(c -> provider.equals(c.provider())).findFirst()
+                    .orElseGet(() -> connections.create(businessId, provider, now()));
+            businessDataSource.updateSourceType(businessId, sourceType.name());
+            return new BusinessDataSource(businessId, ExternalDataSourceType.EXTERNAL_API,
+                    connection.provider(), connection.id(), connection.status());
         }));
     }
 
@@ -68,10 +109,10 @@ public final class ManageExternalBusinessDataSource {
 
     public BusinessDataSource source(UUID userId, BusinessId businessId) {
         return authorization.execute(userId, businessId, ignored -> tenants.execute(businessId, () -> {
+            requireBusinessDataSource();
             var current = connections.list(businessId).stream().findFirst();
-            if (current.isEmpty()) return new BusinessDataSource(businessId,
-                    com.tino.backend.external.domain.model.ExternalDataSourceType.TINO_NATIVE, null, null,
-                    ExternalConnectionStatus.READY);
+            if (ExternalDataSourceType.TINO_NATIVE.name().equals(businessDataSource.readSourceType(businessId))) return nativeSource(businessId);
+            if (current.isEmpty()) throw new IllegalStateException("external source has no connection");
             var connection = current.orElseThrow();
             return new BusinessDataSource(businessId, connection.sourceType(), connection.provider(), connection.id(), connection.status());
         }));
@@ -183,6 +224,15 @@ public final class ManageExternalBusinessDataSource {
 
     private void requireProvider(String provider) {
         if (provider == null || provider.isBlank() || !providers.containsKey(provider)) throw new IllegalArgumentException("unsupported external provider");
+    }
+
+    private void requireBusinessDataSource() {
+        if (businessDataSource == null) throw new IllegalStateException("business data source capability is required");
+    }
+
+    private static BusinessDataSource nativeSource(BusinessId businessId) {
+        return new BusinessDataSource(businessId, ExternalDataSourceType.TINO_NATIVE, null, null,
+                ExternalConnectionStatus.READY);
     }
 
     private Instant now() { return clock.instant(); }

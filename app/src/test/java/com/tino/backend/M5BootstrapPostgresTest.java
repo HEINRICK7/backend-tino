@@ -111,8 +111,8 @@ class M5BootstrapPostgresTest {
         var info = migrate().info();
 
         assertThat(info.applied()).extracting(migration -> migration.getVersion().toString())
-                .containsExactly("0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14");
-        assertThat(info.current().getVersion().toString()).isEqualTo("14");
+                .containsExactly("0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15");
+        assertThat(info.current().getVersion().toString()).isEqualTo("15");
     }
 
     @Test

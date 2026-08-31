@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.tino.backend.catalog.application.model.ExternalPriceOptionProjection;
 import com.tino.backend.catalog.application.model.ExternalProductProjection;
 import com.tino.backend.catalog.application.port.out.ProductCatalog;
+import com.tino.backend.business.application.port.out.BusinessRepository;
+import com.tino.backend.business.domain.model.BusinessDataSourceType;
 import com.tino.backend.external.application.port.out.ExternalBusinessConnectionRepository;
 import com.tino.backend.shared.kernel.BusinessId;
 import com.tino.backend.shared.kernel.TenantContextExecutor;
@@ -38,6 +40,7 @@ class M13ExternalBusinessDataSourcePostgresTest {
     @Autowired private ProductCatalog catalog;
     @Autowired private TenantContextExecutor tenants;
     @Autowired private DSLContext dsl;
+    @Autowired private BusinessRepository businesses;
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
@@ -80,5 +83,18 @@ class M13ExternalBusinessDataSourcePostgresTest {
                 .singleElement().satisfies(item -> assertThat(item.price()).isEqualByComparingTo("50.00"));
         assertThat(tenants.execute(new BusinessId(BUSINESS_B), () -> dsl.fetchCount(org.jooq.impl.DSL.table(org.jooq.impl.DSL.name("public", "products"))))).isZero();
         assertThat(tenants.execute(new BusinessId(BUSINESS_B), () -> connections.list(new BusinessId(BUSINESS_B)))).isEmpty();
+    }
+
+    @Test
+    void explicitBusinessSourceIsPersistedIndependentlyFromConnectionPresence() {
+        var business = new BusinessId(BUSINESS_A);
+
+        assertThat(businesses.findById(business).orElseThrow().dataSourceType())
+                .isEqualTo(BusinessDataSourceType.TINO_NATIVE);
+        businesses.updateDataSource(business, BusinessDataSourceType.EXTERNAL_API);
+
+        assertThat(businesses.findById(business).orElseThrow().dataSourceType())
+                .isEqualTo(BusinessDataSourceType.EXTERNAL_API);
+        assertThat(tenants.execute(business, () -> connections.list(business))).isEmpty();
     }
 }
