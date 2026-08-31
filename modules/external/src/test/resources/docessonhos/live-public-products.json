@@ -1,0 +1,50 @@
+[
+  {
+    "id": "docinho_brownie_recheado_morango_brigadeiro_branco_doces",
+    "name": "Docinho de Brownie Recheado com Morango e Brigadeiro Branco",
+    "description": "Uma combinação perfeita de brownie macio, morango suculento e brigadeiro branco.",
+    "image": "/imagens/cardapio/doces/docinho_brownie_recheado_morango_brigadeiro_branco.webp",
+    "categoryId": "infantil",
+    "subcategoryId": "festa_infantil",
+    "isActive": true,
+    "createdAt": "2026-04-04T23:59:36.137Z",
+    "updatedAt": "2026-04-05T11:32:28.508Z",
+    "priceOptions": [
+      {
+        "id": "b563dc72-e94b-4216-b90e-6c0782d2d818",
+        "productId": "docinho_brownie_recheado_morango_brigadeiro_branco_doces",
+        "label": null,
+        "quantity": 1,
+        "unit": "UN",
+        "price": "3.5",
+        "isDefault": true,
+        "createdAt": "2026-04-04T23:59:36.137Z",
+        "updatedAt": "2026-04-04T23:59:36.137Z"
+      }
+    ]
+  },
+  {
+    "id": "updated-product",
+    "name": "Produto atualizado",
+    "description": null,
+    "image": null,
+    "categoryId": "bolos",
+    "subcategoryId": "cobertura",
+    "isActive": false,
+    "createdAt": "2026-04-04T23:59:36.000Z",
+    "updatedAt": "2026-04-05T10:00:00.000Z",
+    "priceOptions": [
+      {
+        "id": "option-2",
+        "productId": "updated-product",
+        "label": "Unidade",
+        "quantity": 1,
+        "unit": "unidade",
+        "price": 10,
+        "isDefault": true,
+        "createdAt": "2026-04-04T23:59:36.000Z",
+        "updatedAt": "2026-04-05T10:00:00.000Z"
+      }
+    ]
+  }
+]

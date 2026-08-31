@@ -64,11 +64,16 @@ External business catalogs are backend-only. Register a provider with
 `GET /api/v1/businesses/{businessId}/external-connections` or
 `GET /api/v1/businesses/{businessId}/data-source`, and start a sync with
 `POST /api/v1/businesses/{businessId}/external-connections/{connectionId}/sync`.
-The first provider is `DOCES_SONHOS`; its token and URL are runtime-only:
-`TINO_EXTERNAL_DOCES_SONHOS_BASE_URL`,
-`TINO_EXTERNAL_DOCES_SONHOS_API_TOKEN`, and optionally
-`TINO_EXTERNAL_DOCES_SONHOS_PRODUCTS_PATH`. No credential is accepted or
-returned by the TINO API, Android, logs, fixtures, or persistence.
+The first provider is `DOCES_SONHOS`. Its current public catalog contract is
+`GET https://api.doces-sonhos.otimizanegocio.com/public/products` and its
+OpenAPI is available at
+`https://api.doces-sonhos.otimizanegocio.com/api-json` (Swagger UI at
+`/api`). The base URL and path can be overridden with
+`TINO_EXTERNAL_DOCES_SONHOS_BASE_URL` and
+`TINO_EXTERNAL_DOCES_SONHOS_PRODUCTS_PATH`. The endpoint is public, so
+`TINO_EXTERNAL_DOCES_SONHOS_API_TOKEN` is optional and is sent only when
+configured for a gateway. No credential is accepted or returned by the TINO
+API, Android, logs, fixtures, or persistence.
 
 The current functional entry point is `POST /api/v1/bootstrap`, which returns
 the initial authenticated user/business/installation state without performing

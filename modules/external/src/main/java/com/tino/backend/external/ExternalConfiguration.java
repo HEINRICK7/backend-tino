@@ -29,8 +29,8 @@ public class ExternalConfiguration {
     ExternalCatalogProvider docesSonhosCatalogProvider(
             @Qualifier("externalCatalogHttpClient") HttpClient http,
             ObjectMapper mapper,
-            @Value("${tino.external.doces-sonhos.base-url:}") String baseUrl,
-            @Value("${tino.external.doces-sonhos.products-path:/integrations/tino/v1/products}") String path,
+            @Value("${tino.external.doces-sonhos.base-url:https://api.doces-sonhos.otimizanegocio.com}") String baseUrl,
+            @Value("${tino.external.doces-sonhos.products-path:/public/products}") String path,
             @Value("${tino.external.doces-sonhos.api-token:}") String token,
             @Value("${tino.external.doces-sonhos.timeout:PT10S}") Duration timeout) {
         return new DocesSonhosCatalogAdapter(http, mapper, baseUrl.isBlank() ? null : URI.create(baseUrl), path, token, timeout);

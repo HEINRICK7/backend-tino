@@ -63,14 +63,21 @@ exists.
 
 ## Consumed provider contract
 
-The preferred versioned route is `GET /integrations/tino/v1/products` with an
-envelope containing `products`, `next_cursor`, `watermark`, and product fields
-`id`, `name`, `active`, `updated_at`, `price_options`, `category` and
-`subcategory`. Price options contain `id`, `label`, `quantity`, `unit`, `price`
-and `is_default`. The adapter also accepts the locally documented legacy direct
-array (`GET /products`) for controlled compatibility; it does not treat that
-legacy shape as the final contract because it has no cursor or update watermark.
-The external contract must be frozen jointly before a real provider smoke.
+The confirmed Doces & Sonhos contract is the public direct-array endpoint
+`GET https://api.doces-sonhos.otimizanegocio.com/public/products`. Its OpenAPI
+document is published at `/api-json` and its Swagger UI at `/api`. Each product
+contains `id`, `name`, `description`, `image`, `categoryId`, `subcategoryId`,
+`isActive`, `createdAt`, `updatedAt` and `priceOptions`. Price options contain
+`id`, nullable `label`, `productId`, numeric `quantity`, `unit`, decimal-string
+`price`, `isDefault`, `createdAt` and `updatedAt`.
+
+The endpoint is public and currently returns a complete snapshot: it does not
+declare cursor, watermark or incremental query parameters. The adapter accepts
+an optional runtime bearer token for deployments that add an authenticated
+gateway, preserves the complete price-option set, uses the maximum product
+`updatedAt` as the local watermark, and remains idempotent when the snapshot is
+read again. The old locally documented envelope remains supported for fixture
+compatibility, but is not presented as the live provider contract.
 
 ## APIs
 

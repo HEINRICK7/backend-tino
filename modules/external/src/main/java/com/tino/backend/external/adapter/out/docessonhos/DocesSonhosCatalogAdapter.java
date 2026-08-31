@@ -25,7 +25,7 @@ import java.util.UUID;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-/** First outer adapter. It converts the versioned provider contract into canonical products. */
+/** First outer adapter. It converts the provider contract into canonical products. */
 public final class DocesSonhosCatalogAdapter implements ExternalCatalogProvider {
     public static final String PROVIDER = "DOCES_SONHOS";
     private final HttpClient http;
@@ -40,7 +40,7 @@ public final class DocesSonhosCatalogAdapter implements ExternalCatalogProvider 
         this.http = http;
         this.mapper = mapper;
         this.baseUri = baseUri;
-        this.path = path == null || path.isBlank() ? "/integrations/tino/v1/products" : path;
+        this.path = path == null || path.isBlank() ? "/public/products" : path;
         this.runtimeToken = runtimeToken == null ? "" : runtimeToken;
         this.timeout = timeout;
     }
@@ -50,9 +50,13 @@ public final class DocesSonhosCatalogAdapter implements ExternalCatalogProvider 
 
     @Override
     public ExternalCatalogPage fetch(UUID connectionId, String cursor, Instant watermark) {
-        if (baseUri == null || runtimeToken.isBlank()) throw new ExternalProviderAuthenticationException();
-        var request = HttpRequest.newBuilder(uri(cursor, watermark)).timeout(timeout)
-                .header("Accept", "application/json").header("Authorization", "Bearer " + runtimeToken).GET().build();
+        if (baseUri == null) throw new ExternalProviderUnavailableException();
+        var requestBuilder = HttpRequest.newBuilder(uri(cursor, watermark)).timeout(timeout)
+                .header("Accept", "application/json");
+        // /public/products is intentionally public. A runtime token remains supported
+        // for deployments that put the provider behind an authenticated gateway.
+        if (!runtimeToken.isBlank()) requestBuilder.header("Authorization", "Bearer " + runtimeToken);
+        var request = requestBuilder.GET().build();
         for (var attempt = 0; attempt < 2; attempt++) {
             try {
                 var response = http.send(request, HttpResponse.BodyHandlers.ofString());
@@ -87,7 +91,8 @@ public final class DocesSonhosCatalogAdapter implements ExternalCatalogProvider 
             for (var i = 0; i < productsNode.size(); i++) products.add(parseProduct(productsNode.get(i), connectionId, fallbackTime, i));
             var next = text(root, "next_cursor", "nextCursor");
             var watermark = instant(root, "watermark", "updated_at", "updatedAt");
-            return new ExternalCatalogPage(products, next, watermark == null ? fallbackTime : watermark);
+            if (watermark == null) watermark = products.stream().map(ExternalProduct::updatedAt).max(Instant::compareTo).orElse(fallbackTime);
+            return new ExternalCatalogPage(products, next, watermark);
         } catch (ExternalProviderMalformedException exception) {
             throw exception;
         } catch (RuntimeException exception) {
@@ -116,8 +121,8 @@ public final class DocesSonhosCatalogAdapter implements ExternalCatalogProvider 
         }
         var defaultOption = options.stream().filter(ExternalPriceOption::defaultOption).findFirst().orElse(options.getFirst());
         var updated = instant(node, "updated_at", "updatedAt");
-        var category = context(node, "category");
-        var subcategory = context(node, "subcategory");
+        var category = context(node, "category", "categoryId");
+        var subcategory = context(node, "subcategory", "subcategoryId");
         return new ExternalProduct(connectionId, externalId, name, boolOr(node, true, "active", "isActive"),
                 updated == null ? fallbackTime : updated, defaultOption.price(), options, defaultOption.quantity(),
                 defaultOption.unit(), defaultOption.unitRaw(), category, subcategory);
@@ -131,8 +136,8 @@ public final class DocesSonhosCatalogAdapter implements ExternalCatalogProvider 
         return URI.create(query.isEmpty() ? value : value + "?" + String.join("&", query));
     }
 
-    private static String context(JsonNode node, String field) {
-        var value = node == null ? null : node.get(field);
+    private static String context(JsonNode node, String... fields) {
+        var value = first(node, fields);
         if (value == null || value.isNull()) return null;
         return value.isObject() ? text(value, "name", "label") : scalar(value);
     }
