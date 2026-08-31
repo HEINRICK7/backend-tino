@@ -7,6 +7,7 @@ dependencies {
     implementation(libs.spring.context)
     implementation(libs.spring.tx)
     implementation(libs.jooq)
+    implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.oauth2.resource.server)
     compileOnly(libs.spring.modulith.starter.core)
     testImplementation(libs.spring.boot.starter.test)

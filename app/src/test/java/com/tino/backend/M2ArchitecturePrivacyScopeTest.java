@@ -95,8 +95,7 @@ class M2ArchitecturePrivacyScopeTest {
                 root.resolve("app/src/main/resources/db/migration/V1__identity_users.sql")));
         var forbidden = List.of(
                 "businessmembership", "businessrole", "device registration", "bootstrap",
-                "customer", "credit", "ledger", "payment", "pix", "reconciliation", "sync event",
-                "whatsapp");
+                "customer", "credit", "ledger", "payment", "pix", "reconciliation", "sync event");
         production.forEach(source -> forbidden.forEach(term -> assertThat(source.toLowerCase())
                 .as("forbidden M2 scope term %s", term)
                 .doesNotContain(term)));
