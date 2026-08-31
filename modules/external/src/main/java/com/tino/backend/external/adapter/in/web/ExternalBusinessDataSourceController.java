@@ -7,6 +7,9 @@ import com.tino.backend.external.domain.model.ExternalBusinessConnection;
 import com.tino.backend.identity.application.port.in.AuthenticatedPrincipal;
 import com.tino.backend.identity.application.port.in.AuthenticatedUserResolver;
 import com.tino.backend.shared.kernel.BusinessId;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -22,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 /** Backend-only onboarding and sync API; credentials are deliberately absent from its contract. */
 @RestController
 @RequestMapping("/api/v1/businesses/{businessId}/external-connections")
+@Tag(name = "External business data", description = "Backend-managed external catalog connections and synchronization")
 public final class ExternalBusinessDataSourceController {
     private final AuthenticatedUserResolver users;
     private final ManageExternalBusinessDataSource source;
@@ -32,6 +36,8 @@ public final class ExternalBusinessDataSourceController {
     }
 
     @PostMapping
+    @Operation(summary = "Register an external catalog connection",
+            description = "Registers a provider without accepting or returning external credentials. Repeating the same provider is replay-safe.")
     public ResponseEntity<ConnectionResponse> register(@AuthenticationPrincipal AuthenticatedPrincipal principal,
             @PathVariable UUID businessId, @RequestBody RegisterConnectionRequest request) {
         var result = source.register(user(principal), new BusinessId(businessId), request.provider());
@@ -39,18 +45,22 @@ public final class ExternalBusinessDataSourceController {
     }
 
     @GetMapping
+    @Operation(summary = "List external catalog connections", description = "Returns connection status and sanitized sync counters.")
     public List<ConnectionResponse> list(@AuthenticationPrincipal AuthenticatedPrincipal principal,
             @PathVariable UUID businessId) {
         return source.list(user(principal), new BusinessId(businessId)).stream().map(ExternalBusinessDataSourceController::response).toList();
     }
 
     @GetMapping("/{connectionId}")
+    @Operation(summary = "Get an external catalog connection", description = "Returns one connection status without secrets.")
     public ConnectionResponse get(@AuthenticationPrincipal AuthenticatedPrincipal principal,
             @PathVariable UUID businessId, @PathVariable UUID connectionId) {
         return response(source.get(user(principal), new BusinessId(businessId), connectionId));
     }
 
     @PostMapping("/{connectionId}/sync")
+    @Operation(summary = "Synchronize the external catalog",
+            description = "Reads the configured provider catalog and idempotently projects products and price options into the TINO catalog.")
     public ExternalSyncResult sync(@AuthenticationPrincipal AuthenticatedPrincipal principal,
             @PathVariable UUID businessId, @PathVariable UUID connectionId) {
         return source.sync(user(principal), new BusinessId(businessId), connectionId);
@@ -70,7 +80,9 @@ public final class ExternalBusinessDataSourceController {
                 connection.lastSyncUpdated(), connection.lastSyncDeactivated(), connection.lastSyncRejected());
     }
 
-    public record RegisterConnectionRequest(String provider) {}
+    public record RegisterConnectionRequest(
+            @Schema(description = "Provider identifier", allowableValues = {"DOCES_SONHOS"}, example = "DOCES_SONHOS")
+            String provider) {}
 
     public record ConnectionResponse(UUID id, UUID businessId, String provider,
             com.tino.backend.external.domain.model.ExternalConnectionStatus status,
