@@ -186,17 +186,30 @@ jobs:
             done
             return 1
           }
-          printf '%s\n' "$TINO_ENV_FILE" | retry_ssh "$VPS_USER@$VPS_HOST" 'umask 077; cat > /opt/tino/.env'
+          printf '%s\n' "$TINO_ENV_FILE" | retry_ssh "$VPS_USER@$VPS_HOST" 'umask 077; cat > /opt/tino/.env.next'
           printf '%s' "$GHCR_TOKEN" | retry_ssh "$VPS_USER@$VPS_HOST" "docker login ghcr.io --username '$GHCR_USER' --password-stdin"
           retry_ssh "$VPS_USER@$VPS_HOST" \
-            "TINO_IMAGE='$TINO_IMAGE' TINO_KEYCLOAK_IMAGE='$TINO_KEYCLOAK_IMAGE' TINO_DELIVERY_IMAGE='$TINO_DELIVERY_IMAGE' docker compose --env-file /opt/tino/.env -f /opt/tino/compose.vps.yaml config --quiet"
+            "TINO_IMAGE='$TINO_IMAGE' TINO_KEYCLOAK_IMAGE='$TINO_KEYCLOAK_IMAGE' TINO_DELIVERY_IMAGE='$TINO_DELIVERY_IMAGE' docker compose --env-file /opt/tino/.env.next -f /opt/tino/compose.vps.yaml config --quiet"
           if ! retry_ssh "$VPS_USER@$VPS_HOST" \
             "TINO_IMAGE='$TINO_IMAGE' TINO_KEYCLOAK_IMAGE='$TINO_KEYCLOAK_IMAGE' TINO_DELIVERY_IMAGE='$TINO_DELIVERY_IMAGE' /bin/sh -s" <<'REMOTE'
           set -eu
           cd /opt/tino
-          set -a
-          . ./.env
-          set +a
+          staged_env=/opt/tino/.env.next
+          env_file="$staged_env"
+          trap 'rm -f "$staged_env"' EXIT
+          dotenv_value() {
+            value="$(sed -n "s/^$1=//p" "$env_file" | head -n 1)"
+            case "$value" in
+              \'*\') value="${value#\\'}"; value="${value%\\'}" ;;
+              \"*\") value="${value#\\\"}"; value="${value%\\\"}" ;;
+            esac
+            printf '%s' "$value"
+          }
+          TINO_API_HOST="$(dotenv_value TINO_API_HOST)"
+          TINO_AUTH_HOST="$(dotenv_value TINO_AUTH_HOST)"
+          TINO_VPS_IPV4="$(dotenv_value TINO_VPS_IPV4)"
+          TINO_LETSENCRYPT_EMAIL="$(dotenv_value TINO_LETSENCRYPT_EMAIL)"
+          TINO_OTP_ENABLED="$(dotenv_value TINO_OTP_ENABLED)"
           : "${TINO_API_HOST:?missing TINO_API_HOST}"
           : "${TINO_AUTH_HOST:?missing TINO_AUTH_HOST}"
           : "${TINO_VPS_IPV4:?missing TINO_VPS_IPV4}"
@@ -243,10 +256,12 @@ jobs:
             -d "$TINO_API_HOST" -d "$TINO_AUTH_HOST" \
             --non-interactive --agree-tos --keep-until-expiring \
             --email "$TINO_LETSENCRYPT_EMAIL"
+          mv "$staged_env" /opt/tino/.env
+          env_file=/opt/tino/.env
           compose() {
-            docker compose --env-file /opt/tino/.env -f /opt/tino/compose.vps.yaml "$@"
+            docker compose --env-file "$env_file" -f /opt/tino/compose.vps.yaml "$@"
           }
-          if test "${TINO_OTP_ENABLED:-false}" = "true"; then
+          if test "$TINO_OTP_ENABLED" = "true"; then
             compose --profile otp pull app keycloak otp-delivery
             compose --profile otp up -d --no-build --remove-orphans
           else
