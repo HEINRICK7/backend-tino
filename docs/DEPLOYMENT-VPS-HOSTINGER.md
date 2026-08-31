@@ -1,6 +1,6 @@
 # TINO — Hostinger VPS deployment
 
-Status: **READY FOR REDEPLOY; host Nginx integration prepared**
+Status: **DEPLOYED; HTTPS smoke passed**
 
 This deployment is isolated from the existing Docker Compose projects on the
 Hostinger VPS. It does not run `docker compose down`, does not restart unrelated
