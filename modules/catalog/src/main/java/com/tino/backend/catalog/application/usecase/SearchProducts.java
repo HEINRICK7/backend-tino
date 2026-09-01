@@ -26,9 +26,6 @@ public final class SearchProducts {
         if (limit < 1 || limit > MAX_LIMIT) {
             throw new IllegalArgumentException("limit must be between 1 and 100");
         }
-        if ((text == null || text.isBlank()) && (gtin == null || gtin.isBlank())) {
-            throw new IllegalArgumentException("q or gtin is required");
-        }
         return authorization.execute(userId, businessId,
                 authorized -> catalog.search(authorized, text, gtin, limit));
     }
