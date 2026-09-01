@@ -64,7 +64,7 @@ class NfeAndroidContractHttpApiTest {
         try (var connection = DriverManager.getConnection(POSTGRES.getJdbcUrl(),
                 M2PostgresTestContainer.MIGRATOR, POSTGRES.migratorPassword());
                 var statement = connection.createStatement()) {
-            statement.execute("TRUNCATE TABLE public.external_product_price_options, public.external_product_mappings, public.external_business_connections, public.inventory_movements, public.inventory_balances, "
+            statement.execute("TRUNCATE TABLE public.purchase_receipt_confirmation_idempotency, public.receiving_events, public.purchase_price_observations, public.purchase_receipt_items, public.purchase_receipts, public.receiving_purchase_preview_idempotency, public.receiving_purchase_preview_items, public.receiving_purchase_previews, public.purchase_document_items, public.purchase_documents, public.external_product_price_options, public.external_product_mappings, public.external_business_connections, public.inventory_movements, public.inventory_balances, "
                     + "public.goods_receipt_items, public.goods_receipts, public.goods_receipt_preview_items, "
                     + "public.goods_receipt_previews, public.packaging_conversions, public.supplier_product_mappings, "
                     + "public.product_identifiers, public.products, public.nfe_retrieval_idempotency_keys, "
