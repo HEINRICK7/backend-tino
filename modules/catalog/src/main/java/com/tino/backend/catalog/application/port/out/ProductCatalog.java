@@ -21,5 +21,9 @@ public interface ProductCatalog {
     Optional<BigDecimal> conversion(BusinessId businessId, String issuerDocument, String supplierCode,
             String purchaseUnit, String baseUnit);
     List<ProductSearchItem> search(BusinessId businessId, String text, String gtin, int limit);
+    default List<ProductSearchItem> search(BusinessId businessId, String text, String gtin, int limit, int offset) {
+        if (offset != 0) throw new UnsupportedOperationException("offset is not supported");
+        return search(businessId, text, gtin, limit);
+    }
     ExternalProductProjectionResult upsertExternalProduct(BusinessId businessId, ExternalProductProjection projection);
 }

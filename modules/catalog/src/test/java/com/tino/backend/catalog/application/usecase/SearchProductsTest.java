@@ -30,4 +30,22 @@ class SearchProductsTest {
         assertThat(result).isEqualTo(List.of());
         verify(catalog).search(business, null, null, 100);
     }
+
+    @Test
+    void allowsReadingTheNextBoundedCatalogPage() {
+        var catalog = mock(ProductCatalog.class);
+        var business = new BusinessId(UUID.randomUUID());
+        BusinessAuthorization authorization = new BusinessAuthorization() {
+            @Override
+            public <T> T execute(UUID userId, BusinessId requestedBusiness, Function<BusinessId, T> operation) {
+                return operation.apply(requestedBusiness);
+            }
+        };
+        var useCase = new SearchProducts(authorization, catalog);
+
+        var result = useCase.execute(UUID.randomUUID(), business, null, null, 100, 100);
+
+        assertThat(result).isEqualTo(List.of());
+        verify(catalog).search(business, null, null, 100, 100);
+    }
 }

@@ -12,6 +12,7 @@ import java.util.UUID;
 public final class SearchProducts {
     public static final int DEFAULT_LIMIT = 50;
     public static final int MAX_LIMIT = 100;
+    public static final int MAX_OFFSET = 100_000;
 
     private final BusinessAuthorization authorization;
     private final ProductCatalog catalog;
@@ -23,10 +24,24 @@ public final class SearchProducts {
 
     public List<ProductSearchItem> execute(UUID userId, BusinessId businessId,
             String text, String gtin, int limit) {
+        validateLimit(limit);
+        return authorization.execute(userId, businessId,
+                authorized -> catalog.search(authorized, text, gtin, limit));
+    }
+
+    public List<ProductSearchItem> execute(UUID userId, BusinessId businessId,
+            String text, String gtin, int limit, int offset) {
+        validateLimit(limit);
+        if (offset < 0 || offset > MAX_OFFSET) {
+            throw new IllegalArgumentException("offset must be between 0 and 100000");
+        }
+        return authorization.execute(userId, businessId,
+                authorized -> catalog.search(authorized, text, gtin, limit, offset));
+    }
+
+    private static void validateLimit(int limit) {
         if (limit < 1 || limit > MAX_LIMIT) {
             throw new IllegalArgumentException("limit must be between 1 and 100");
         }
-        return authorization.execute(userId, businessId,
-                authorized -> catalog.search(authorized, text, gtin, limit));
     }
 }
