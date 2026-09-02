@@ -11,6 +11,9 @@ import com.tino.backend.business.application.port.in.AccessibleBusinessView;
 import com.tino.backend.business.application.port.in.BusinessContextReader;
 import com.tino.backend.device.application.port.in.ActiveInstallationView;
 import com.tino.backend.device.application.port.in.DeviceInstallationContextReader;
+import com.tino.backend.businessunderstanding.application.port.in.BusinessUnderstandingReader;
+import com.tino.backend.businessunderstanding.application.model.BusinessUnderstandingView;
+import com.tino.backend.shared.kernel.BusinessId;
 import com.tino.backend.identity.application.exception.DisabledUserException;
 import com.tino.backend.identity.application.exception.InvalidAuthenticatedPrincipalException;
 import com.tino.backend.identity.application.port.in.AuthenticatedPrincipal;
@@ -29,14 +32,24 @@ public final class ResolveBootstrapContext {
     private final AuthenticatedUserResolver authenticatedUsers;
     private final BusinessContextReader businesses;
     private final DeviceInstallationContextReader installations;
+    private final BusinessUnderstandingReader understanding;
 
     public ResolveBootstrapContext(
             AuthenticatedUserResolver authenticatedUsers,
             BusinessContextReader businesses,
             DeviceInstallationContextReader installations) {
+        this(authenticatedUsers, businesses, installations, null);
+    }
+
+    public ResolveBootstrapContext(
+            AuthenticatedUserResolver authenticatedUsers,
+            BusinessContextReader businesses,
+            DeviceInstallationContextReader installations,
+            BusinessUnderstandingReader understanding) {
         this.authenticatedUsers = Objects.requireNonNull(authenticatedUsers, "authenticatedUsers");
         this.businesses = Objects.requireNonNull(businesses, "businesses");
         this.installations = Objects.requireNonNull(installations, "installations");
+        this.understanding = understanding;
     }
 
     public BootstrapContext execute(
@@ -52,7 +65,7 @@ public final class ResolveBootstrapContext {
 
         if (businessSummaries.isEmpty()) {
             return new BootstrapContext(
-                    BootstrapState.BUSINESS_REQUIRED, userSummary, businessSummaries, null, null);
+                    BootstrapState.BUSINESS_REQUIRED, userSummary, businessSummaries, null, null, null);
         }
 
         var selected = selectBusiness(businessSummaries, requestedBusinessId);
@@ -64,7 +77,7 @@ public final class ResolveBootstrapContext {
                     userSummary,
                     businessSummaries,
                     null,
-                    null);
+                    null, readUnderstanding(user.userId(), selected));
         }
 
         if (installationExternalId == null || installationExternalId.isBlank()) {
@@ -73,7 +86,7 @@ public final class ResolveBootstrapContext {
                     userSummary,
                     businessSummaries,
                     selected,
-                    null);
+                    null, readUnderstanding(user.userId(), selected));
         }
 
         var installation = installations.resolve(
@@ -86,11 +99,20 @@ public final class ResolveBootstrapContext {
                     userSummary,
                     businessSummaries,
                     selected,
-                    null);
+                    null,
+                    readUnderstanding(user.userId(), selected));
         }
 
         return new BootstrapContext(
-                BootstrapState.READY, userSummary, businessSummaries, selected, installation);
+                BootstrapState.READY, userSummary, businessSummaries, selected, installation,
+                readUnderstanding(user.userId(), selected));
+    }
+
+    private BusinessUnderstandingView readUnderstanding(UUID userId, BootstrapBusinessSummary selected) {
+        if (understanding == null || selected == null) {
+            return null;
+        }
+        return understanding.read(userId, new BusinessId(selected.id()));
     }
 
     private AuthenticatedUserSnapshot resolveUser(AuthenticatedPrincipal principal) {

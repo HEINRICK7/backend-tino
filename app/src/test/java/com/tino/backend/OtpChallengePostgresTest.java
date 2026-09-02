@@ -31,7 +31,7 @@ class OtpChallengePostgresTest {
     void cleanChallenges() throws Exception {
         migrate().migrate();
         try (var connection = migratorConnection(); var statement = connection.createStatement()) {
-            statement.execute("TRUNCATE TABLE public.otp_challenges");
+            statement.execute("TRUNCATE TABLE public.business_item_purposes, public.business_operating_modes, public.business_activities, public.otp_challenges");
         }
     }
 

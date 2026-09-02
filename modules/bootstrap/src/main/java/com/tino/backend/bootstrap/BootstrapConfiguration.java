@@ -1,6 +1,7 @@
 package com.tino.backend.bootstrap;
 
 import com.tino.backend.bootstrap.application.usecase.ResolveBootstrapContext;
+import com.tino.backend.businessunderstanding.application.port.in.BusinessUnderstandingReader;
 import com.tino.backend.business.application.port.in.BusinessContextReader;
 import com.tino.backend.device.application.port.in.DeviceInstallationContextReader;
 import com.tino.backend.identity.application.port.in.AuthenticatedUserResolver;
@@ -14,7 +15,8 @@ public class BootstrapConfiguration {
     ResolveBootstrapContext resolveBootstrapContext(
             AuthenticatedUserResolver authenticatedUsers,
             BusinessContextReader businesses,
-            DeviceInstallationContextReader installations) {
-        return new ResolveBootstrapContext(authenticatedUsers, businesses, installations);
+            DeviceInstallationContextReader installations,
+            BusinessUnderstandingReader understanding) {
+        return new ResolveBootstrapContext(authenticatedUsers, businesses, installations, understanding);
     }
 }

@@ -20,3 +20,8 @@ WA_EVOLUTION_INSTANCE=tino
 serviço não registra telefone, mensagem, OTP, tokens ou respostas do provider.
 Sem a configuração completa, health/readiness retorna `503`; não há falso
 sucesso.
+
+O número remetente não aparece neste contrato: ele é a conta WhatsApp vinculada
+à instância `WA_EVOLUTION_INSTANCE` no Evolution. Cada request recebe somente
+o destinatário em E.164 (`+55...`) e a mensagem do backend. O Android nunca
+conhece nem configura o número remetente.

@@ -9,6 +9,12 @@ O Keycloak continua sendo a autoridade de identidade e o único emissor dos
 tokens OIDC. O backend TINO nunca emite JWT próprio, não usa password grant e
 não confia em telefone, instalação ou Business como prova de identidade.
 
+O número digitado no cadastro é sempre o destinatário do OTP. O remetente é a
+conta WhatsApp vinculada à instância Evolution configurada no serviço Go; essa
+identidade não é enviada pelo Android, não é hardcoded no APK e não é escolhida
+pelo usuário. Ambos os números são normalizados internamente para E.164 (por
+exemplo, `+55...`).
+
 ## Contrato HTTP
 
 ### Solicitar código
@@ -82,7 +88,8 @@ não emite token.
 Android → TINO RequestOtp → OtpDeliveryPort
                            → WaEvolutionOtpDeliveryAdapter
                            → serviço Go privado
-                           → wa-evolution → WhatsApp
+                           → wa-evolution (instância com remetente vinculado)
+                           → WhatsApp → destinatário informado no cadastro
 
 Android → TINO VerifyOtp → verification ticket
         → Keycloak Browser Flow / TINO OTP Authenticator
@@ -94,7 +101,9 @@ Android → TINO VerifyOtp → verification ticket
 O domínio e a aplicação conhecem somente `OtpDeliveryPort`. O provider atual é
 selecionado na composição por `WA_EVOLUTION`; Meta e RCS ficam como adapters
 futuros. O serviço Go é carteiro: não gera/valida OTP, não conhece Keycloak,
-Business ou tenant e não persiste sessão de autenticação.
+Business ou tenant e não persiste sessão de autenticação. A instância Evolution
+define o remetente; o request interno contém somente o destinatário E.164 e a
+mensagem já preparada pelo backend.
 
 ## Persistência e proteção
 
