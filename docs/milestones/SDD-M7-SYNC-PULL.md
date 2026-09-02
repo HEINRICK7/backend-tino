@@ -1,6 +1,6 @@
 # SDD-M7 — Sync Pull
 
-Status: **DRAFT — NOT AUTHORIZED**
+Status: **AUTHORIZED BY PROJECT OWNER**
 
 ## GOAL
 Provide deterministic, tenant-safe incremental change pagination.

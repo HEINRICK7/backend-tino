@@ -29,10 +29,20 @@ public class SecurityFoundationConfiguration {
             HttpSecurity http, Converter<Jwt, AbstractAuthenticationToken> jwtAuthenticationConverter)
             throws Exception {
         return http.authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/actuator/health", "/actuator/health/**", "/openapi/**", "/swagger-ui/**", "/swagger-ui.html")
+                        .requestMatchers(
+                                "/actuator/health",
+                                "/actuator/health/**",
+                                "/openapi/**",
+                                "/swagger-ui/**",
+                                "/swagger-ui.html",
+                                "/api/v1/auth/otp/**",
+                                "/internal/v1/identity/otp/**")
+                        .permitAll()
+                        .requestMatchers("/api/v1/businesses/*/payment-webhooks/**")
                         .permitAll()
                         .anyRequest()
                         .authenticated())
+                .csrf(csrf -> csrf.disable())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt
                         .jwtAuthenticationConverter(jwtAuthenticationConverter)))
                 .build();

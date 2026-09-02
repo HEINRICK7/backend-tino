@@ -25,6 +25,18 @@ tino:
   security:
     oidc:
       client-id: ${TINO_SECURITY_OIDC_CLIENT_ID:tino-android}
+  identity:
+    otp:
+      enabled: ${TINO_OTP_ENABLED:false}
+      hash-secret: ${TINO_OTP_HASH_SECRET:}
+      internal-token: ${TINO_OTP_INTERNAL_TOKEN:}
+      cleanup-interval-ms: ${TINO_OTP_CLEANUP_INTERVAL_MS:3600000}
+      delivery:
+        provider: ${TINO_OTP_DELIVERY_PROVIDER:WA_EVOLUTION}
+        base-url: ${TINO_OTP_DELIVERY_BASE_URL:http://otp-delivery:8080}
+        path: ${TINO_OTP_DELIVERY_PATH:/internal/v1/messages/otp}
+        internal-token: ${TINO_OTP_DELIVERY_INTERNAL_TOKEN:}
+        timeout: ${TINO_OTP_DELIVERY_TIMEOUT:PT5S}
 server:
   shutdown: graceful
   error:
@@ -52,3 +64,17 @@ springdoc:
     path: /openapi
   swagger-ui:
     path: /swagger-ui.html
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      serpro:
+        sliding-window-size: 20
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 2
+  bulkhead:
+    instances:
+      serpro:
+        max-concurrent-calls: 4
+        max-wait-duration: 0ms

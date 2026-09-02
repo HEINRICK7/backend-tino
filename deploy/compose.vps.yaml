@@ -1,0 +1,153 @@
+name: tino
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: tino_admin
+      POSTGRES_PASSWORD: ${TINO_POSTGRES_ADMIN_PASSWORD:?missing TINO_POSTGRES_ADMIN_PASSWORD}
+      POSTGRES_DB: tino
+      TINO_POSTGRES_APP_PASSWORD: ${TINO_POSTGRES_APP_PASSWORD:?missing TINO_POSTGRES_APP_PASSWORD}
+      TINO_POSTGRES_MIGRATOR_PASSWORD: ${TINO_POSTGRES_MIGRATOR_PASSWORD:?missing TINO_POSTGRES_MIGRATOR_PASSWORD}
+    volumes:
+      - tino-postgres:/var/lib/postgresql/data
+      - ./init.sh:/docker-entrypoint-initdb.d/00-roles.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tino_admin -d tino"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    networks: [private]
+
+  keycloak-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?missing KEYCLOAK_DB_PASSWORD}
+      POSTGRES_DB: keycloak
+    volumes:
+      - tino-keycloak-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    networks: [private]
+
+  keycloak:
+    image: ${TINO_KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26.3}
+    command: ["start", "--import-realm"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?missing KEYCLOAK_DB_PASSWORD}
+      KC_HOSTNAME: https://${TINO_AUTH_HOST:?missing TINO_AUTH_HOST}
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${TINO_KEYCLOAK_ADMIN_USERNAME:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${TINO_KEYCLOAK_ADMIN_PASSWORD:?missing TINO_KEYCLOAK_ADMIN_PASSWORD}
+      TINO_OTP_BACKEND_URL: ${TINO_OTP_BACKEND_URL:-http://app:8080}
+      TINO_OTP_INTERNAL_TOKEN: ${TINO_OTP_INTERNAL_TOKEN:-}
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    volumes:
+      - ./tino-realm.json:/opt/keycloak/data/import/tino-realm.json:ro
+    ports:
+      - "127.0.0.1:18581:8080"
+    restart: unless-stopped
+    networks: [private, edge]
+
+  keycloak-otp-config:
+    profiles: [otp]
+    image: ${TINO_KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26.3}
+    depends_on:
+      keycloak:
+        condition: service_started
+    environment:
+      TINO_KEYCLOAK_ADMIN_USERNAME: ${TINO_KEYCLOAK_ADMIN_USERNAME:-admin}
+      TINO_KEYCLOAK_ADMIN_PASSWORD: ${TINO_KEYCLOAK_ADMIN_PASSWORD:?missing TINO_KEYCLOAK_ADMIN_PASSWORD}
+    entrypoint: ["/bin/sh", "/opt/tino/configure-tino-otp-flow.sh"]
+    volumes:
+      - ./configure-tino-otp-flow.sh:/opt/tino/configure-tino-otp-flow.sh:ro
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    tmpfs: [/tmp]
+    restart: "no"
+    networks: [private]
+
+  app:
+    image: ${TINO_IMAGE:?missing TINO_IMAGE}
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/tino
+      SPRING_DATASOURCE_USERNAME: tino_app
+      SPRING_DATASOURCE_PASSWORD: ${TINO_POSTGRES_APP_PASSWORD:?missing TINO_POSTGRES_APP_PASSWORD}
+      SPRING_FLYWAY_USER: tino_migrator
+      SPRING_FLYWAY_PASSWORD: ${TINO_POSTGRES_MIGRATOR_PASSWORD:?missing TINO_POSTGRES_MIGRATOR_PASSWORD}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: https://${TINO_AUTH_HOST:?missing TINO_AUTH_HOST}/realms/tino
+      TINO_SECURITY_OIDC_CLIENT_ID: tino-android
+      TINO_FISCAL_MODE: ${TINO_FISCAL_MODE:-fixture}
+      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: ${MANAGEMENT_TRACING_SAMPLING_PROBABILITY:-0.1}
+      OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-true}
+      TINO_OTP_ENABLED: ${TINO_OTP_ENABLED:-false}
+      TINO_OTP_HASH_SECRET: ${TINO_OTP_HASH_SECRET:-}
+      TINO_OTP_INTERNAL_TOKEN: ${TINO_OTP_INTERNAL_TOKEN:-}
+      TINO_OTP_DELIVERY_PROVIDER: ${TINO_OTP_DELIVERY_PROVIDER:-WA_EVOLUTION}
+      TINO_OTP_DELIVERY_BASE_URL: ${TINO_OTP_DELIVERY_BASE_URL:-http://otp-delivery:8080}
+      TINO_OTP_DELIVERY_PATH: ${TINO_OTP_DELIVERY_PATH:-/internal/v1/messages/otp}
+      TINO_OTP_DELIVERY_INTERNAL_TOKEN: ${TINO_OTP_DELIVERY_INTERNAL_TOKEN:-}
+      TINO_OTP_DELIVERY_TIMEOUT: ${TINO_OTP_DELIVERY_TIMEOUT:-PT5S}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    tmpfs: [/tmp]
+    ports:
+      - "127.0.0.1:18080:8080"
+    restart: unless-stopped
+    networks: [private, edge]
+
+  otp-delivery:
+    profiles: [otp]
+    image: ${TINO_DELIVERY_IMAGE:-ghcr.io/heinrick7/backend-tino-delivery:local}
+    environment:
+      TINO_INTERNAL_TOKEN: ${TINO_OTP_DELIVERY_INTERNAL_TOKEN:-}
+      WA_EVOLUTION_BASE_URL: ${WA_EVOLUTION_BASE_URL:-}
+      WA_EVOLUTION_API_KEY: ${WA_EVOLUTION_API_KEY:-}
+      WA_EVOLUTION_INSTANCE: ${WA_EVOLUTION_INSTANCE:-}
+      WA_EVOLUTION_SEND_PATH: ${WA_EVOLUTION_SEND_PATH:-/message/sendText/{instance}}
+    expose: ["8080"]
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    tmpfs: [/tmp]
+    restart: unless-stopped
+    networks: [private, evolution]
+
+volumes:
+  tino-postgres:
+  tino-keycloak-postgres:
+
+networks:
+  private:
+    internal: true
+  edge:
+  evolution:
+    name: ${TINO_EVOLUTION_NETWORK:-evolution-api-5q9j_default}
+    external: true

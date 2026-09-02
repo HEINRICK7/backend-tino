@@ -1,6 +1,7 @@
 .gradle/
 build/
 **/build/
+**/.kotlin/
 .idea/
 *.iml
 .vscode/
@@ -21,3 +22,6 @@ Thumbs.db
 *.p12
 *.jks
 hs_err_pid*
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/

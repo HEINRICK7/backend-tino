@@ -1,0 +1,23 @@
+{
+  "nfeProc": {
+    "protNFe": { "infProt": { "chNFe": "53160911510448000171550010000106771000187760", "cStat": 100 } },
+    "NFe": {
+      "infNFe": {
+        "ide": { "nNF": 15430, "serie": 0, "dhEmi": "2017-06-05T08:31:06-03:00", "natOp": "VENDA", "tpNF": 1 },
+        "emit": { "CNPJ": "56776378000136", "xNome": "COMERCIO DE TESTE LTDA EPP", "xFant": "COMERCIO DE TESTE", "IE": 123456789123 },
+        "det": [
+          {
+            "nItem": 1,
+            "prod": {
+              "cEAN": "", "cProd": 346, "qCom": 5, "cEANTrib": "", "vUnTrib": 149,
+              "qTrib": 5, "vProd": 745, "xProd": "SULFITE A4 75GR BOREAL (5000FLS)",
+              "vUnCom": 149, "indTot": 1, "uTrib": "RS", "uCom": "RS",
+              "NCM": 48025610, "CFOP": 5102, "CEST": 9999999, "vDesc": 0,
+              "vFrete": 0, "vSeg": 0, "vOutro": 0
+            }
+          }
+        ]
+      }
+    }
+  }
+}

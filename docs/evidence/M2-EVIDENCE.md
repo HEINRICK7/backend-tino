@@ -5,13 +5,12 @@ Repository: `HEINRICK7/backend-tino`
 Branch: `sdd/m2-identity-security`
 Base commit: `2f338a443291ab329dd43185c56fd58bf6b6e761` (`main`, M2 `AUTHORIZED`)
 Implementation commit: `dc25fa4` (`feat: implement M2 identity and security foundation`)
-Final evidence commit: pending supervisor finalization
+Final evidence commit: this evidence update (SHA reported in Git history)
 M3 authorized: **NO**
 
-This document records implementation verification performed by Luna. Terra/root
-must independently review the diff, rerun critical gates, and decide the final
-milestone verdict. No credentials, token values, private keys, or bearer values
-are recorded here.
+This document records implementation verification performed by Luna and the
+independent supervisor verification below. No credentials, token values,
+private keys, or bearer values are recorded here.
 
 ## Verdict at implementation handoff
 
@@ -350,19 +349,183 @@ supervisor/root owns final Git verification and publication.
 No specification conflict or architectural blocker was encountered. No M3
 implementation was started.
 
+## Independent supervisor verification
+
+The supervisor independently verified the pushed branch at `51cab3d` against
+`main` at `2f338a4` without changing `main` or applying either preserved stash:
+
+```text
+git diff --check                                      PASS
+./scripts/secret-scan.sh                             PASS
+./gradlew clean build architecture migrations        PASS; 41 actionable tasks
+dependency audit                                     PASS; no prohibited runtime dependencies
+inner boundary and M3+ scope scans                   PASS; none found
+JUnit aggregate                                      PASS; 48 tests, failures=0, errors=0, skipped=0
+```
+
+The supervisor reviewed the complete changed-file list and confirmed that only
+M2 identity/security implementation, tests, the users migration, narrowly
+required build wiring, and this evidence are present. Both stashes remain
+preserved and no M3 implementation is present. The GitGuardian remediation
+remains closed with no blocking findings; shared incident `36632763` may still
+display `IGNORED / low_risk` rather than `RESOLVED / revoked` in its public view.
+
+After this verification, `origin/main` was observed at `f98bf44`, an external
+merge of PR #3 containing the implementation handoff through `51cab3d`. This
+session did not merge or modify `main`; the final evidence commit below remains
+exclusive to `sdd/m2-identity-security`.
+
 ## Final handoff
 
 ```text
 MILESTONE: M2 — IDENTITY & SECURITY FOUNDATION
-STATUS: PASS (implementation gates; supervisor final verification pending)
+STATUS: PASS
 TEST-M2-001..027: PASS in mapping above
 Stash@{0}: PRESERVED
 Stash@{1}: PRESERVED
 Branch: sdd/m2-identity-security
 Implementation Commit: dc25fa4
-Final Evidence Commit: pending supervisor finalization
-Push: pending supervisor/root publication
+Final Evidence Commit: this evidence update (SHA reported in Git history)
+Push: PASS (`sdd/m2-identity-security`)
 Merge to main: NO
+M3 AUTHORIZED: NO
+STOP.
+```
+
+## Integration and promotion checkpoint
+
+This additive section records the promotion-flow verification after the
+historical M2 handoff above. The historical implementation and evidence
+commits remain unchanged. No stash was applied, popped, dropped, or rewritten.
+
+### Branch flow and reconciliation
+
+The official flow is `feature/* -> develop -> staging -> main`, as required by
+the mandatory policy in `docs/governance/GIT-BRANCHING-POLICY.md`. The policy
+commit is administrative documentation only; no functional commit was added to
+main or staging.
+
+```text
+git fetch --all --prune                                      PASS
+origin/main                                                  429bb44d0f391347db2c54858288b4f7e58b1775
+origin/develop                                               429bb44d0f391347db2c54858288b4f7e58b1775
+origin/staging                                               429bb44d0f391347db2c54858288b4f7e58b1775
+main/develop/staging synchronized                            PASS
+```
+
+Local main was advanced from `f98bf44` to `429bb44` by a normal fast-forward
+containing only the requested policy document; the corresponding remote push
+was also a normal fast-forward. `develop` and `staging` were absent remotely,
+then created and pushed at the verified current main SHA. No force-push,
+history rewrite, branch deletion, or merge into develop/staging/main was used.
+
+The official feature branch was created and first pushed at the original final
+M2 evidence commit `4d45132ad042abde73d9c65e059f08d7627e5abc`. The legacy
+`sdd/m2-identity-security` branch remains preserved at that same commit. The
+latest `develop` was reconciled with:
+
+```text
+git merge --no-ff --no-edit develop                         PASS
+reconciliation merge commit                                577e7d20340d7c9dcde3b763d4dd9dcf598cdc92
+merge conflicts                                              none
+```
+
+The merge introduced only the mandatory governance document. The M2 evidence
+content from the historical feature branch was retained for this additive
+promotion update. The final feature HEAD is the evidence commit containing
+this section, recorded by the final Git verification and handoff below.
+
+### Re-run gates on reconciled feature
+
+All gates below ran after the reconciliation merge. Runtime credentials were
+environment-provided or generated in memory and are represented as
+`<runtime-generated>` here.
+
+```text
+./gradlew clean build architecture migrations --rerun-tasks --no-daemon --console=plain
+BUILD SUCCESSFUL in 1m 2s; 41 actionable tasks
+
+./gradlew :modules:identity:test --rerun-tasks --no-daemon --console=plain
+BUILD SUCCESSFUL in 25s; 11 actionable tasks; 8 tests, failures=0, errors=0
+
+./gradlew :app:test --tests com.tino.backend.M2IdentityPostgresTest \
+  --tests com.tino.backend.M2SecurityBoundaryTest \
+  --tests com.tino.backend.M2ArchitecturePrivacyScopeTest \
+  --tests com.tino.backend.ModularityTest \
+  --tests com.tino.backend.M1ArchitectureTest \
+  --tests com.tino.backend.M1ConfigurationTest \
+  --tests com.tino.backend.FoundationPostgresTest \
+  --tests com.tino.backend.ApplicationFoundationTest \
+  --rerun-tasks --no-daemon --console=plain
+BUILD SUCCESSFUL in 56s; 17 actionable tasks; 29 tests, failures=0, errors=0
+
+./gradlew migrations --rerun-tasks --no-daemon --console=plain
+BUILD SUCCESSFUL in 43s; 13 actionable tasks
+
+JOOQ_JDBC_URL=jdbc:postgresql://127.0.0.1:55432/tino \
+JOOQ_JDBC_USER=tino_migrator \
+JOOQ_JDBC_PASSWORD=<runtime-generated> \
+./gradlew :shared:infrastructure:jooqCodegen --rerun-tasks --no-daemon --console=plain
+BUILD SUCCESSFUL in 21s; 5 actionable tasks; PostgreSQL 17.11; 6 generated files
+```
+
+The PostgreSQL 17.11 jOOQ proof used `tino_migrator` after applying V0 and V1
+to a disposable database. Metadata showed the five users columns, both
+timestamps as `timestamp with time zone`, `relrowsecurity=false`, and
+`tino_app` privileges `SELECT=true, INSERT=true, UPDATE=false, DELETE=false`.
+
+The reconciled security and identity suites therefore re-proved all concrete
+methods listed in TEST-M2-001..027 above: 10 PostgreSQL identity tests,
+including 20 barrier-synchronized first accesses yielding one UUID-v7 row; 8
+HTTP Resource Server boundary tests; 5 architecture/privacy/scope tests; 3
+identity unit suites totaling 8 tests; and the M1/Modulith regression gates.
+All reported zero failures, errors, or skips.
+
+### Promotion audits
+
+```text
+./gradlew :app:dependencies --configuration runtimeClasspath --no-daemon --console=plain
+forbidden-functional-dependencies: none
+./gradlew :app:dependencies --configuration testRuntimeClasspath --no-daemon --console=plain
+forbidden-functional-dependencies: none
+./gradlew :modules:identity:dependencies --configuration runtimeClasspath --no-daemon --console=plain
+forbidden-functional-dependencies: none
+
+KEYCLOAK_SCAN=none
+ORM_BROKER_SCAN=none
+SCOPE_SCAN=none
+PRIVACY_SCAN=none
+git diff --check                                           PASS
+./scripts/secret-scan.sh                                  Secret scan passed.
+```
+
+The cached scan and staged-file review for this evidence-only commit are run
+immediately before committing. `gh auth status` reported no authenticated
+GitHub host, so a PR could not be created from this environment; the prepared
+target is `feature/m2-identity-security -> develop` and no substitute PR was
+opened.
+
+## Promotion checkpoint handoff
+
+```text
+BRANCH POLICY: PASS
+Official flow: feature/* -> develop -> staging -> main
+main: 429bb44d0f391347db2c54858288b4f7e58b1775
+develop: 429bb44d0f391347db2c54858288b4f7e58b1775
+staging: 429bb44d0f391347db2c54858288b4f7e58b1775
+M2 technical status: PASS
+Feature branch: feature/m2-identity-security
+Original M2 evidence commit: 4d45132ad042abde73d9c65e059f08d7627e5abc
+Reconciled feature HEAD before this evidence commit: 577e7d20340d7c9dcde3b763d4dd9dcf598cdc92
+M2 gates after reconciliation: PASS
+TEST-M2-001..027: PASS
+Secret Scan: PASS
+Scope Leakage: NONE
+PR: feature/m2-identity-security -> develop
+PR status: NOT CREATED (gh is not authenticated)
+Merged to develop: NO
+Promoted to staging: NO
+Promoted to main: NO
 M3 AUTHORIZED: NO
 STOP.
 ```

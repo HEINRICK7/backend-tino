@@ -19,15 +19,41 @@ class M1ArchitectureTest {
                 root.resolve("shared/kernel/src/main"),
                 root.resolve("modules/identity/src/main/java/com/tino/backend/identity/domain"),
                 root.resolve("modules/identity/src/main/java/com/tino/backend/identity/application"),
-                root.resolve("modules/business/src/main"),
-                root.resolve("modules/device/src/main"),
-                root.resolve("modules/sync/src/main"),
+                root.resolve("modules/business/src/main/java/com/tino/backend/business/domain"),
+                root.resolve("modules/business/src/main/java/com/tino/backend/business/application"),
+                root.resolve("modules/businessunderstanding/src/main/java/com/tino/backend/businessunderstanding/domain"),
+                root.resolve("modules/businessunderstanding/src/main/java/com/tino/backend/businessunderstanding/application"),
+                root.resolve("modules/device/src/main/java/com/tino/backend/device/domain"),
+                root.resolve("modules/device/src/main/java/com/tino/backend/device/application"),
+                root.resolve("modules/sync/src/main/java/com/tino/backend/sync/domain"),
+                root.resolve("modules/sync/src/main/java/com/tino/backend/sync/application"),
+                root.resolve("modules/customer/src/main/java/com/tino/backend/customer/domain"),
+                root.resolve("modules/customer/src/main/java/com/tino/backend/customer/application"),
+                root.resolve("modules/credit/src/main/java/com/tino/backend/credit/domain"),
+                root.resolve("modules/credit/src/main/java/com/tino/backend/credit/application"),
                 root.resolve("app/src/main/java"));
 
         sourceTexts(contractRoots).forEach(source -> assertThat(source)
                 .doesNotContain("org.jooq")
                 .doesNotContain("DSLContext")
                 .doesNotContain("org.jooq.impl"));
+
+        sourceTexts(List.of(root.resolve(
+                        "modules/business/src/main/java/com/tino/backend/business/adapter/out/persistence"),
+                root.resolve("modules/device/src/main/java/com/tino/backend/device/adapter/out/persistence")))
+                .forEach(source -> assertThat(source).contains("org.jooq").contains("DSLContext"));
+        sourceTexts(List.of(root.resolve(
+                "modules/sync/src/main/java/com/tino/backend/sync/adapter/out/persistence")))
+                .forEach(source -> assertThat(source).contains("org.jooq").contains("DSLContext"));
+        sourceTexts(List.of(root.resolve(
+                "modules/customer/src/main/java/com/tino/backend/customer/adapter/out/persistence")))
+                .forEach(source -> assertThat(source).contains("org.jooq").contains("DSLContext"));
+        sourceTexts(List.of(root.resolve(
+                "modules/credit/src/main/java/com/tino/backend/credit/adapter/out/persistence")))
+                .forEach(source -> assertThat(source).contains("org.jooq").contains("DSLContext"));
+        sourceTexts(List.of(root.resolve(
+                "modules/businessunderstanding/src/main/java/com/tino/backend/businessunderstanding/adapter/out/persistence")))
+                .forEach(source -> assertThat(source).contains("org.jooq").contains("DSLContext"));
     }
 
     @Test

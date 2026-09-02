@@ -9,8 +9,20 @@ dependencies {
     implementation(project(":shared:infrastructure"))
     implementation(project(":modules:identity"))
     implementation(project(":modules:business"))
+    implementation(project(":modules:businessunderstanding"))
     implementation(project(":modules:device"))
+    implementation(project(":modules:bootstrap"))
     implementation(project(":modules:sync"))
+    implementation(project(":modules:customer"))
+    implementation(project(":modules:credit"))
+    implementation(project(":modules:payment"))
+    implementation(project(":modules:reconciliation"))
+    implementation(project(":modules:messaging"))
+    implementation(project(":modules:fiscal"))
+    implementation(project(":modules:catalog"))
+    implementation(project(":modules:receiving"))
+    implementation(project(":modules:inventory"))
+    implementation(project(":modules:external"))
 
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.validation)
@@ -38,6 +50,7 @@ dependencies {
     testImplementation(libs.testcontainers.junit)
     testImplementation(libs.testcontainers.postgresql)
     testImplementation(libs.archunit.junit)
+    testImplementation("org.springframework.security:spring-security-test")
 }
 
 tasks.test { maxParallelForks = 1 }
