@@ -112,6 +112,11 @@ public class JooqProductCatalog implements ProductCatalog {
 
     @Override
     public List<ProductSearchItem> search(BusinessId businessId, String text, String gtin, int limit) {
+        return search(businessId, text, gtin, limit, 0);
+    }
+
+    @Override
+    public List<ProductSearchItem> search(BusinessId businessId, String text, String gtin, int limit, int offset) {
         var condition = PRODUCTS_BUSINESS_ID.eq(businessId.value()).and(field("status", String.class).eq("ACTIVE"));
         if (text != null && !text.isBlank()) {
             condition = condition.and(DSL.lower(PRODUCTS_NAME).like("%" + text.trim().toLowerCase(Locale.ROOT) + "%"));
@@ -126,7 +131,7 @@ public class JooqProductCatalog implements ProductCatalog {
         }
         var rows = dsl.select(PRODUCTS_ID, PRODUCTS_NAME, PRODUCTS_BASE_UNIT, SALE_PRICE)
                 .from(PRODUCTS).where(condition)
-                .orderBy(PRODUCTS_NAME.asc(), PRODUCTS_ID.asc()).limit(limit).fetch();
+                .orderBy(PRODUCTS_NAME.asc(), PRODUCTS_ID.asc()).limit(limit).offset(offset).fetch();
         return rows.map(row -> new ProductSearchItem(row.get(PRODUCTS_ID), row.get(PRODUCTS_NAME),
                 row.get(PRODUCTS_BASE_UNIT), dsl.select(VALUE).from(IDENTIFIERS)
                         .where(IDENTIFIERS_BUSINESS_ID.eq(businessId.value())

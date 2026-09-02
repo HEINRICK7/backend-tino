@@ -43,9 +43,10 @@ public final class ProductSearchController {
             @PathVariable UUID businessId,
             @RequestParam(name = "q", required = false) String text,
             @RequestParam(required = false) String gtin,
-            @RequestParam(defaultValue = "50") int limit) {
+            @RequestParam(defaultValue = "50") int limit,
+            @RequestParam(defaultValue = "0") int offset) {
         var user = users.resolve(requirePrincipal(principal));
-        return searchProducts.execute(user.userId(), new BusinessId(businessId), text, gtin, limit);
+        return searchProducts.execute(user.userId(), new BusinessId(businessId), text, gtin, limit, offset);
     }
 
     private static AuthenticatedPrincipal requirePrincipal(AuthenticatedPrincipal principal) {
