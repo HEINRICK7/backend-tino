@@ -9,6 +9,7 @@ dependencies {
     implementation(project(":shared:infrastructure"))
     implementation(project(":modules:identity"))
     implementation(project(":modules:business"))
+    implementation(project(":modules:businessunderstanding"))
     implementation(project(":modules:device"))
     implementation(project(":modules:bootstrap"))
     implementation(project(":modules:sync"))

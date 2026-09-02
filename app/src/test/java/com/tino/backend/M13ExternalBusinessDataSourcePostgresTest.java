@@ -58,7 +58,7 @@ class M13ExternalBusinessDataSourcePostgresTest {
                 POSTGRES.migratorPassword()).locations("classpath:db/migration").load().migrate();
         try (var connection = DriverManager.getConnection(POSTGRES.getJdbcUrl(), M2PostgresTestContainer.MIGRATOR,
                 POSTGRES.migratorPassword()); var statement = connection.createStatement()) {
-            statement.execute("TRUNCATE TABLE public.external_product_price_options, public.external_product_mappings, public.external_business_connections, public.products, public.businesses CASCADE");
+            statement.execute("TRUNCATE TABLE public.business_item_purposes, public.business_operating_modes, public.business_activities, public.external_product_price_options, public.external_product_mappings, public.external_business_connections, public.products, public.businesses CASCADE");
             statement.execute("INSERT INTO public.businesses (id, trade_name, vertical, status, created_at, updated_at) VALUES "
                     + "('" + BUSINESS_A + "', 'External A', 'OTHER', 'ACTIVE', '2026-08-30T12:00:00Z', '2026-08-30T12:00:00Z'),"
                     + "('" + BUSINESS_B + "', 'External B', 'OTHER', 'ACTIVE', '2026-08-30T12:00:00Z', '2026-08-30T12:00:00Z')");

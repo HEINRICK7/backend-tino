@@ -18,6 +18,7 @@ include(
     "app",
     "modules:identity",
     "modules:business",
+    "modules:businessunderstanding",
     "modules:device",
     "modules:bootstrap",
     "modules:sync",

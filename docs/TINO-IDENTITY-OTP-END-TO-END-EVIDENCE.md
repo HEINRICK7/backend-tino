@@ -62,6 +62,7 @@ Android contract
 | VPS readiness `https://api.tino.otimizanegocio.com/actuator/health/readiness` | HTTP 200 |
 | pre-auth sem bearer com telefone inválido | HTTP 400 `INVALID_OTP_REQUEST` |
 | `otp-delivery` + Evolution network | PASS, provider configurado e serviço ativo |
+| Android físico → API com destinatário sem dígito suficiente | PASS, rejeitado como `INVALID_OTP_REQUEST` antes da entrega |
 
 ## Arquivos principais
 
@@ -78,8 +79,9 @@ Android contract
 ## Gates ainda abertos
 
 1. Falta executar uma solicitação OTP real com um número de teste autorizado;
-   as credenciais de runtime estão configuradas e o delivery está ativo, mas
-   nenhuma mensagem foi enviada sem um destinatário explicitamente autorizado.
+   as credenciais de runtime estão configuradas, a instância Evolution está
+   `open` e o remetente é definido pela sessão vinculada à instância; nenhuma
+   mensagem foi enviada sem um destinatário completo explicitamente autorizado.
 2. Falta o smoke em Android físico/emulador até `bootstrap → READY`.
 3. A operação de Produção/F7 continua bloqueada.
 
