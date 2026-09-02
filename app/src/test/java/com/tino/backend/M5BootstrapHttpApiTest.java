@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -99,7 +101,7 @@ class M5BootstrapHttpApiTest {
                 POSTGRES.getJdbcUrl(), M2PostgresTestContainer.MIGRATOR,
                 POSTGRES.migratorPassword());
                 var statement = connection.createStatement()) {
-            statement.execute("TRUNCATE TABLE public.purchase_receipt_confirmation_idempotency, public.receiving_events, public.purchase_price_observations, public.purchase_receipt_items, public.purchase_receipts, public.receiving_purchase_preview_idempotency, public.receiving_purchase_preview_items, public.receiving_purchase_previews, public.purchase_document_items, public.purchase_documents, public.external_product_price_options, public.external_product_mappings, public.external_business_connections, public.inventory_movements, public.inventory_balances, public.goods_receipt_items, public.goods_receipts, public.goods_receipt_preview_items, public.goods_receipt_previews, public.packaging_conversions, public.supplier_product_mappings, public.product_identifiers, public.products, public.nfe_retrieval_idempotency_keys, public.nfe_items, public.nfe_document_versions, public.nfe_documents, public.message_delivery_evidence, public.message_outbox, public.messages, public.message_consent_audit, public.message_consents, public.reconciliation_items, public.reconciliation_runs, public.payment_provider_events, public.payment_outbox, "
+            statement.execute("TRUNCATE TABLE public.business_item_purposes, public.business_operating_modes, public.business_activities, public.purchase_receipt_confirmation_idempotency, public.receiving_events, public.purchase_price_observations, public.purchase_receipt_items, public.purchase_receipts, public.receiving_purchase_preview_idempotency, public.receiving_purchase_preview_items, public.receiving_purchase_previews, public.purchase_document_items, public.purchase_documents, public.external_product_price_options, public.external_product_mappings, public.external_business_connections, public.inventory_movements, public.inventory_balances, public.goods_receipt_items, public.goods_receipts, public.goods_receipt_preview_items, public.goods_receipt_previews, public.packaging_conversions, public.supplier_product_mappings, public.product_identifiers, public.products, public.nfe_retrieval_idempotency_keys, public.nfe_items, public.nfe_document_versions, public.nfe_documents, public.message_delivery_evidence, public.message_outbox, public.messages, public.message_consent_audit, public.message_consents, public.reconciliation_items, public.reconciliation_runs, public.payment_provider_events, public.payment_outbox, "
                     + "public.payment_idempotency_keys, public.payments, public.credit_audit_records, public.credit_idempotency_keys, "
                     + "public.credit_ledger_entries, public.credit_accounts, public.customer_idempotency_keys, public.customers, "
                     + "public.sync_event_rejections, public.sync_outbox, "
@@ -318,6 +320,64 @@ class M5BootstrapHttpApiTest {
         bootstrap("m5-http-no-event", business, null);
 
         assertThat(counts()).isEqualTo(before);
+    }
+
+    @Test
+    void testBusinessUnderstandingApiAndBootstrapSemanticSection() throws Exception {
+        var subject = "business-understanding-http";
+        var business = createBusiness(subject, "Doces & Sonhos");
+        var authentication = authentication(principal(subject));
+
+        mockMvc.perform(put("/api/v1/businesses/{businessId}/business-understanding/activities", business)
+                        .with(authentication)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"activities\":[{\"code\":\"CONFEITARIA\"},{\"code\":\"ENCOMENDAS\"}]}"))
+                .andExpect(status().isOk())
+                .andExpect(result -> assertThat(result.getResponse().getContentAsString())
+                        .contains("IN_PROGRESS", "DEFINE_OPERATING_MODEL"));
+
+        mockMvc.perform(put("/api/v1/businesses/{businessId}/business-understanding/operating-modes", business)
+                        .with(authentication)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"modes\":[\"PRODUCES_GOODS\",\"BUYS_INPUTS\",\"RESELLS_GOODS\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(result -> assertThat(result.getResponse().getContentAsString())
+                        .contains("READY", "NONE"));
+
+        mockMvc.perform(get("/api/v1/businesses/{businessId}/business-understanding", business)
+                        .with(authentication))
+                .andExpect(status().isOk())
+                .andExpect(result -> assertThat(result.getResponse().getContentAsString())
+                        .contains("CONFEITARIA", "ENCOMENDAS", "PRODUCES_GOODS", "BUYS_INPUTS"));
+
+        var bootstrap = bootstrapBody(subject, business, null);
+        assertThat(bootstrap.path("business_understanding").path("status").asText())
+                .isEqualTo("READY");
+        assertThat(bootstrap.path("business_understanding").path("next_action").asText())
+                .isEqualTo("NONE");
+    }
+
+    @Test
+    void businessUnderstandingNeverTrustsBusinessIdFromAnotherAuthenticatedUser() throws Exception {
+        var ownerSubject = "business-understanding-owner";
+        var otherSubject = "business-understanding-other";
+        var ownerBusiness = createBusiness(ownerSubject, "Comércio do proprietário");
+        createBusiness(otherSubject, "Comércio de outro usuário");
+        var otherAuthentication = authentication(principal(otherSubject));
+
+        mockMvc.perform(get("/api/v1/businesses/{businessId}/business-understanding", ownerBusiness)
+                        .with(otherAuthentication))
+                .andExpect(status().isForbidden())
+                .andExpect(result -> assertThat(result.getResponse().getContentAsString())
+                        .contains("BUSINESS_ACCESS_DENIED"));
+
+        mockMvc.perform(put("/api/v1/businesses/{businessId}/business-understanding/activities", ownerBusiness)
+                        .with(otherAuthentication)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"activities\":[{\"code\":\"MERCADINHO\"}]}"))
+                .andExpect(status().isForbidden())
+                .andExpect(result -> assertThat(result.getResponse().getContentAsString())
+                        .contains("BUSINESS_ACCESS_DENIED"));
     }
 
     private JsonNode bootstrapBody(String subject, UUID businessId, String installationId)

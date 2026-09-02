@@ -64,7 +64,7 @@ class PurchaseDocumentReceivingHttpApiTest {
         try (var connection = DriverManager.getConnection(POSTGRES.getJdbcUrl(),
                 M2PostgresTestContainer.MIGRATOR, POSTGRES.migratorPassword());
                 var statement = connection.createStatement()) {
-            statement.execute("TRUNCATE TABLE public.purchase_receipt_confirmation_idempotency, "
+            statement.execute("TRUNCATE TABLE public.business_item_purposes, public.business_operating_modes, public.business_activities, public.purchase_receipt_confirmation_idempotency, "
                     + "public.receiving_events, public.purchase_price_observations, public.purchase_receipt_items, "
                     + "public.purchase_receipts, public.receiving_purchase_preview_idempotency, "
                     + "public.receiving_purchase_preview_items, public.receiving_purchase_previews, "

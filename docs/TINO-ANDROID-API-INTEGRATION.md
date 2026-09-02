@@ -7,6 +7,14 @@ Este documento descreve como o aplicativo Android deve consumir o TINO. O
 aplicativo conversa somente com o backend TINO; ele não chama a API da Doces &
 Sonhos diretamente.
 
+### Remetente e destinatário do OTP
+
+O valor de `phone` enviado pelo app é o destinatário do código. O remetente é a
+sessão WhatsApp vinculada à instância Evolution do serviço de delivery e fica
+fora do Android. O app deve enviar o celular do usuário; não deve conhecer,
+persistir ou hardcodar o número mestre/remetente. O backend normaliza o valor
+para E.164 e o serviço Go encaminha a mensagem pela instância configurada.
+
 ## Autenticação TINO por celular
 
 O fluxo de produto usa celular + OTP enviado pelo WhatsApp. O app não deve
