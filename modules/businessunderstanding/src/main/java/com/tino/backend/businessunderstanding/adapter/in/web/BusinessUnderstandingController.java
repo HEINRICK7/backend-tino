@@ -14,6 +14,7 @@ import com.tino.backend.businessunderstanding.domain.model.ActivityCode;
 import com.tino.backend.businessunderstanding.domain.model.BusinessActivity;
 import com.tino.backend.businessunderstanding.domain.model.BusinessUnderstandingSnapshot;
 import com.tino.backend.businessunderstanding.domain.model.ItemPurpose;
+import com.tino.backend.businessunderstanding.domain.model.ItemPurposeHint;
 import com.tino.backend.businessunderstanding.domain.model.OperatingMode;
 import com.tino.backend.businessunderstanding.domain.model.UsageContext;
 import com.tino.backend.identity.application.port.in.AuthenticatedPrincipal;
@@ -89,7 +90,8 @@ public final class BusinessUnderstandingController {
     public ItemPurposeResolution resolvePurpose(@AuthenticationPrincipal AuthenticatedPrincipal principal,
             @PathVariable UUID businessId, @Valid @RequestBody ResolvePurposeRequest request) {
         return resolveItemPurpose.execute(user(principal), new BusinessId(businessId), request.productId(),
-                request.description(), UsageContext.orLegacy(request.usageContext()), request.source());
+                request.description(), UsageContext.orLegacy(request.usageContext()), parseHints(request.semanticHints()),
+                request.source());
     }
 
     @PostMapping("/api/v1/businesses/{businessId}/business-understanding/item-purpose/confirm")
@@ -141,6 +143,18 @@ public final class BusinessUnderstandingController {
         }
     }
 
+    private static List<ItemPurposeHint> parseHints(List<SemanticHintRequest> requests) {
+        if (requests == null) {
+            return List.of();
+        }
+        try {
+            return requests.stream().map(request -> new ItemPurposeHint(
+                    parsePurpose(request.purpose()), request.source(), request.reason())).toList();
+        } catch (RuntimeException exception) {
+            throw invalid("INVALID_ITEM_PURPOSE_HINT");
+        }
+    }
+
     private static InvalidBusinessUnderstandingException invalid(String code) {
         return new InvalidBusinessUnderstandingException(code);
     }
@@ -162,7 +176,10 @@ public final class BusinessUnderstandingController {
     public record OperatingModesRequest(@NotNull List<String> modes) {}
 
     public record ResolvePurposeRequest(@JsonProperty("product_id") UUID productId, String description,
-            @JsonProperty("usage_context") String usageContext, String source) {}
+            @JsonProperty("usage_context") String usageContext,
+            @JsonProperty("semantic_hints") List<SemanticHintRequest> semanticHints, String source) {}
+
+    public record SemanticHintRequest(String purpose, String source, String reason) {}
 
     public record ConfirmPurposeRequest(@JsonProperty("product_id") @NotNull UUID productId, String purpose,
             @JsonProperty("usage_context") String usageContext, String reason) {}

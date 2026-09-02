@@ -16,6 +16,9 @@ import com.tino.backend.businessunderstanding.domain.model.BusinessItemPurpose;
 import com.tino.backend.businessunderstanding.domain.model.BusinessOperatingMode;
 import com.tino.backend.businessunderstanding.domain.model.BusinessUnderstandingSnapshot;
 import com.tino.backend.businessunderstanding.domain.model.ItemPurpose;
+import com.tino.backend.businessunderstanding.domain.model.ItemPurposeAuthority;
+import com.tino.backend.businessunderstanding.domain.model.ItemPurposeHint;
+import com.tino.backend.businessunderstanding.domain.model.ItemPurposeResolutionEvidence;
 import com.tino.backend.businessunderstanding.domain.model.ItemPurposeSource;
 import com.tino.backend.businessunderstanding.domain.model.OperatingMode;
 import com.tino.backend.businessunderstanding.domain.model.UsageContext;
@@ -95,6 +98,7 @@ class BusinessUnderstandingUseCaseTest {
         assertThat(result.purpose()).isEqualTo(ItemPurpose.PRODUCTION);
         assertThat(result.resolution()).isEqualTo("USER_CONFIRMED");
         assertThat(result.needsConfirmation()).isFalse();
+        assertThat(result.authority()).isEqualTo(ItemPurposeAuthority.USER_CONFIRMED);
 
         confirm.execute(USER, BUSINESS, product, ItemPurpose.RESALE);
         assertThat(new ResolveItemPurpose(AUTHORIZATION, repository)
@@ -189,6 +193,118 @@ class BusinessUnderstandingUseCaseTest {
     }
 
     @Test
+    void resolutionUsesBusinessContextAndExplicitCatalogHintWithoutReadingProductName() {
+        var bakery = readyRepository(List.of(ActivityCode.PADARIA),
+                List.of(OperatingMode.PRODUCES_GOODS, OperatingMode.RESELLS_GOODS, OperatingMode.BUYS_INPUTS));
+        var market = readyRepository(List.of(ActivityCode.MERCADINHO),
+                List.of(OperatingMode.RESELLS_GOODS, OperatingMode.BUYS_INPUTS));
+        var bakeryResolver = new ResolveItemPurpose(AUTHORIZATION, bakery);
+
+        var bakeryResult = bakeryResolver.execute(USER, BUSINESS, null, "FARINHA DE TRIGO",
+                UsageContext.of("PURCHASE"), List.of(new ItemPurposeHint(
+                        ItemPurpose.PRODUCTION, "CATALOG", "catalog category indicates a production input")), "NFE");
+        var marketResult = new ResolveItemPurpose(AUTHORIZATION, market).execute(USER, BUSINESS, null,
+                "FARINHA DE TRIGO", UsageContext.of("PURCHASE"), List.of(), "NFE");
+
+        assertThat(bakeryResult.purpose()).isEqualTo(ItemPurpose.PRODUCTION);
+        assertThat(bakeryResult.authority()).isEqualTo(ItemPurposeAuthority.SYSTEM_SUGGESTED);
+        assertThat(bakeryResult.evidence()).extracting(ItemPurposeResolutionEvidence::signal)
+                .contains("USAGE_CONTEXT", "ITEM_HINT", "BUSINESS_ACTIVITY", "OPERATING_MODE");
+        assertThat(marketResult.purpose()).isEqualTo(ItemPurpose.RESALE);
+        assertThat(marketResult.authority()).isEqualTo(ItemPurposeAuthority.SYSTEM_SUGGESTED);
+    }
+
+    @Test
+    void salonItemRemainsAmbiguousUntilUsageContextOrHintDisambiguatesIt() {
+        var repository = readyRepository(List.of(ActivityCode.SALAO_BELEZA),
+                List.of(OperatingMode.PROVIDES_SERVICES, OperatingMode.RESELLS_GOODS, OperatingMode.BUYS_INPUTS));
+        var resolver = new ResolveItemPurpose(AUTHORIZATION, repository);
+
+        var ambiguous = resolver.execute(USER, BUSINESS, null, "SHAMPOO",
+                UsageContext.of("PURCHASE"), List.of(), "NFE");
+        var service = resolver.execute(USER, BUSINESS, null, "SHAMPOO",
+                UsageContext.of("SERVICE_CONSUMPTION"), List.of(), "SERVICE");
+        var sale = resolver.execute(USER, BUSINESS, null, "SHAMPOO",
+                UsageContext.of("DIRECT_SALE"), List.of(), "SALE");
+
+        assertThat(ambiguous.purpose()).isEqualTo(ItemPurpose.UNKNOWN);
+        assertThat(ambiguous.needsConfirmation()).isTrue();
+        assertThat(ambiguous.suggestions()).containsExactly(ItemPurpose.SERVICE_INPUT, ItemPurpose.RESALE);
+        assertThat(service.purpose()).isEqualTo(ItemPurpose.SERVICE_INPUT);
+        assertThat(sale.purpose()).isEqualTo(ItemPurpose.RESALE);
+    }
+
+    @Test
+    void productNameAloneDoesNotCreateAUniversalPurposeRule() {
+        var repository = readyRepository(List.of(ActivityCode.PADARIA),
+                List.of(OperatingMode.PRODUCES_GOODS, OperatingMode.RESELLS_GOODS));
+        var resolver = new ResolveItemPurpose(AUTHORIZATION, repository);
+
+        var flour = resolver.execute(USER, BUSINESS, null, "FARINHA DE TRIGO",
+                UsageContext.of("PURCHASE"), List.of(), "NFE");
+        var shampoo = resolver.execute(USER, BUSINESS, null, "SHAMPOO",
+                UsageContext.of("PURCHASE"), List.of(), "NFE");
+
+        assertThat(flour.purpose()).isEqualTo(ItemPurpose.UNKNOWN);
+        assertThat(shampoo.purpose()).isEqualTo(ItemPurpose.UNKNOWN);
+        assertThat(flour.suggestions()).containsExactlyElementsOf(shampoo.suggestions());
+    }
+
+    @Test
+    void confirmedHistoryOutranksProductAndCanonicalAutomaticHistory() {
+        var repository = readyRepository();
+        var product = UUID.randomUUID();
+        var context = UsageContext.of("PURCHASE");
+        repository.upsertAutomaticPurpose(purpose(product, context, ItemPurpose.PRODUCTION,
+                ItemPurposeSource.LEARNED, "SYSTEM", "learned for this product"));
+        repository.upsertAutomaticPurpose(purpose(BUSINESS, "FARINHA DE TRIGO", context,
+                ItemPurpose.RESALE, ItemPurposeSource.SYSTEM_SUGGESTED));
+        new ConfirmItemPurpose(AUTHORIZATION, repository, CLOCK).execute(USER, BUSINESS, product, context,
+                ItemPurpose.SERVICE_INPUT, "confirmed for this context");
+
+        var result = new ResolveItemPurpose(AUTHORIZATION, repository).execute(USER, BUSINESS, product,
+                "FARINHA DE TRIGO", context, List.of(), "NFE");
+
+        assertThat(result.purpose()).isEqualTo(ItemPurpose.SERVICE_INPUT);
+        assertThat(result.authority()).isEqualTo(ItemPurposeAuthority.USER_CONFIRMED);
+        assertThat(result.needsConfirmation()).isFalse();
+        assertThat(result.evidence()).extracting(ItemPurposeResolutionEvidence::signal)
+                .containsExactly("HISTORY");
+    }
+
+    @Test
+    void learnedHistoryIsReusedWithLearnedAuthorityAndStillAllowsConfirmation() {
+        var repository = readyRepository(List.of(ActivityCode.MERCADINHO),
+                List.of(OperatingMode.RESELLS_GOODS));
+        repository.upsertAutomaticPurpose(purpose(BUSINESS, "CAFE", UsageContext.of("PURCHASE"),
+                ItemPurpose.RESALE, ItemPurposeSource.LEARNED));
+
+        var result = new ResolveItemPurpose(AUTHORIZATION, repository).execute(USER, BUSINESS, null,
+                "café", UsageContext.of("PURCHASE"), List.of(), "NFE");
+
+        assertThat(result.purpose()).isEqualTo(ItemPurpose.RESALE);
+        assertThat(result.authority()).isEqualTo(ItemPurposeAuthority.LEARNED);
+        assertThat(result.needsConfirmation()).isTrue();
+        assertThat(result.evidence()).extracting(ItemPurposeResolutionEvidence::signal)
+                .containsExactly("HISTORY");
+    }
+
+    @Test
+    void conflictingSemanticHintsKeepTheDecisionUnknown() {
+        var repository = readyRepository(List.of(ActivityCode.PADARIA),
+                List.of(OperatingMode.PRODUCES_GOODS, OperatingMode.RESELLS_GOODS));
+
+        var result = new ResolveItemPurpose(AUTHORIZATION, repository).execute(USER, BUSINESS, null,
+                "item", UsageContext.of("PURCHASE"), List.of(
+                        new ItemPurposeHint(ItemPurpose.PRODUCTION, "CATALOG_A", "production category"),
+                        new ItemPurposeHint(ItemPurpose.RESALE, "CATALOG_B", "retail category")), "NFE");
+
+        assertThat(result.purpose()).isEqualTo(ItemPurpose.UNKNOWN);
+        assertThat(result.needsConfirmation()).isTrue();
+        assertThat(result.suggestions()).containsExactly(ItemPurpose.PRODUCTION, ItemPurpose.RESALE);
+    }
+
+    @Test
     void purposeCannotBeResolvedBeforeBusinessUnderstandingIsReady() {
         var repository = new InMemoryRepository();
         assertThatThrownBy(() -> new ResolveItemPurpose(AUTHORIZATION, repository)
@@ -228,12 +344,17 @@ class BusinessUnderstandingUseCaseTest {
     }
 
     private static InMemoryRepository readyRepository() {
-        var repository = new InMemoryRepository();
-        new ReplaceBusinessActivities(AUTHORIZATION, repository, CLOCK).execute(USER, BUSINESS,
-                List.of(new BusinessActivity(ActivityCode.CONFEITARIA, null)));
-        new ReplaceOperatingModes(AUTHORIZATION, repository, CLOCK).execute(USER, BUSINESS,
+        return readyRepository(List.of(ActivityCode.CONFEITARIA),
                 List.of(OperatingMode.PRODUCES_GOODS, OperatingMode.RESELLS_GOODS,
                         OperatingMode.PROVIDES_SERVICES));
+    }
+
+    private static InMemoryRepository readyRepository(List<ActivityCode> activities, List<OperatingMode> modes) {
+        var repository = new InMemoryRepository();
+        new ReplaceBusinessActivities(AUTHORIZATION, repository, CLOCK).execute(USER, BUSINESS,
+                activities.stream().map(code -> new BusinessActivity(code, null)).toList());
+        new ReplaceOperatingModes(AUTHORIZATION, repository, CLOCK).execute(USER, BUSINESS,
+                modes);
         return repository;
     }
 

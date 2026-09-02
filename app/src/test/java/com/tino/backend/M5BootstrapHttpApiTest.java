@@ -358,6 +358,34 @@ class M5BootstrapHttpApiTest {
     }
 
     @Test
+    void itemPurposeResolutionReturnsAuthorityEvidenceAndHonorsExplicitHint() throws Exception {
+        var subject = "item-purpose-resolution-http";
+        var business = createBusiness(subject, "Padaria de teste");
+        var authentication = authentication(principal(subject));
+
+        mockMvc.perform(put("/api/v1/businesses/{businessId}/business-understanding/activities", business)
+                        .with(authentication)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"activities\":[{\"code\":\"PADARIA\"}]}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(put("/api/v1/businesses/{businessId}/business-understanding/operating-modes", business)
+                        .with(authentication)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"modes\":[\"PRODUCES_GOODS\",\"RESELLS_GOODS\"]}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/businesses/{businessId}/business-understanding/item-purpose/resolve", business)
+                        .with(authentication)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"description\":\"Farinha de trigo\",\"usage_context\":\"PURCHASE\","
+                                + "\"semantic_hints\":[{\"purpose\":\"PRODUCTION\",\"source\":\"CATALOG\","
+                                + "\"reason\":\"catalog category indicates a production input\"}]}"))
+                .andExpect(status().isOk())
+                .andExpect(result -> assertThat(result.getResponse().getContentAsString())
+                        .contains("PRODUCTION", "SYSTEM_SUGGESTED", "ITEM_HINT", "evidence"));
+    }
+
+    @Test
     void businessUnderstandingNeverTrustsBusinessIdFromAnotherAuthenticatedUser() throws Exception {
         var ownerSubject = "business-understanding-owner";
         var otherSubject = "business-understanding-other";
@@ -375,6 +403,14 @@ class M5BootstrapHttpApiTest {
                         .with(otherAuthentication)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"activities\":[{\"code\":\"MERCADINHO\"}]}"))
+                .andExpect(status().isForbidden())
+                .andExpect(result -> assertThat(result.getResponse().getContentAsString())
+                        .contains("BUSINESS_ACCESS_DENIED"));
+
+        mockMvc.perform(post("/api/v1/businesses/{businessId}/business-understanding/item-purpose/resolve", ownerBusiness)
+                        .with(otherAuthentication)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"description\":\"Produto\",\"usage_context\":\"PURCHASE\"}"))
                 .andExpect(status().isForbidden())
                 .andExpect(result -> assertThat(result.getResponse().getContentAsString())
                         .contains("BUSINESS_ACCESS_DENIED"));
