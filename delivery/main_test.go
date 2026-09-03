@@ -124,7 +124,8 @@ func TestSendOTPUsesCorrelationBoundButtonWhenConfigured(t *testing.T) {
 	if response.Code != http.StatusAccepted {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusAccepted)
 	}
-	if !strings.Contains(receivedBody, `"id":"TINO_AUTH_CONFIRM:challenge-1"`) ||
+	if !strings.Contains(receivedBody, `"type":"reply"`) ||
+		!strings.Contains(receivedBody, `"id":"TINO_AUTH_CONFIRM:challenge-1"`) ||
 		!strings.Contains(receivedBody, `"number":"5586995922924"`) {
 		t.Fatalf("provider button body = %q", receivedBody)
 	}
