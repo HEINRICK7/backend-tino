@@ -33,7 +33,8 @@ public final class WaEvolutionOtpDeliveryAdapter implements OtpDeliveryPort {
             return new OtpDeliveryResult(Status.PERMANENT_FAILURE, Channel.WHATSAPP);
         }
         var body = "{\"destination\":\"" + request.destination().e164()
-                + "\",\"message\":\"Seu codigo TINO e " + request.code() + "\"}";
+                + "\",\"message\":\"Seu codigo TINO e " + request.code()
+                + "\",\"correlation_id\":\"" + request.correlationId() + "\"}";
         for (var attempt = 0; attempt < 2; attempt++) {
             var result = send(body);
             if (result.status() != Status.RETRYABLE_FAILURE || attempt == 1) {

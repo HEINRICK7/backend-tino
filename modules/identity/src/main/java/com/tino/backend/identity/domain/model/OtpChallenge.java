@@ -113,6 +113,27 @@ public record OtpChallenge(
                 createdAt, verifiedAt, null, ticketHash, ticketExpiresAt);
     }
 
+    /** Marks the challenge as verified by a trusted WhatsApp event; ticket issuance is separate. */
+    public OtpChallenge whatsappVerified(Instant verifiedAt) {
+        Objects.requireNonNull(verifiedAt, "verifiedAt");
+        return new OtpChallenge(
+                id, phone, phoneHash, requestOriginHash, codeVerifier, OtpChallengeStatus.VERIFIED,
+                expiresAt, attemptCount, maxAttempts, resendCount, maxResends, resendAvailableAt,
+                createdAt, verifiedAt, null, null, null);
+    }
+
+    public OtpChallenge withVerificationTicket(String ticketHash, Instant ticketExpiresAt) {
+        requireText(ticketHash, "ticketHash");
+        Objects.requireNonNull(ticketExpiresAt, "ticketExpiresAt");
+        if (status != OtpChallengeStatus.VERIFIED) {
+            throw new IllegalStateException("only a verified challenge can receive a ticket");
+        }
+        return new OtpChallenge(
+                id, phone, phoneHash, requestOriginHash, codeVerifier, status,
+                expiresAt, attemptCount, maxAttempts, resendCount, maxResends, resendAvailableAt,
+                createdAt, verifiedAt, consumedAt, ticketHash, ticketExpiresAt);
+    }
+
     public OtpChallenge consumed(Instant consumedAt) {
         return withStatus(OtpChallengeStatus.CONSUMED, verifiedAt, consumedAt);
     }

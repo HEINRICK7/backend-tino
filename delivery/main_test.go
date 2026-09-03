@@ -1,6 +1,9 @@
 package main
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -11,7 +14,7 @@ import (
 func TestSendOTPRejectsMissingInternalToken(t *testing.T) {
 	cfg := &config{internalToken: "internal", client: http.DefaultClient}
 	request := httptest.NewRequest(http.MethodPost, "/internal/v1/messages/otp", strings.NewReader(
-		`{"destination":"+5586995922924","message":"Seu codigo TINO e 123456"}`))
+		`{"destination":"+5586995922924","message":"Seu codigo TINO e 123456","correlation_id":"challenge-1"}`))
 	response := httptest.NewRecorder()
 
 	cfg.sendOTP(response, request)
@@ -44,6 +47,8 @@ func TestSendOTPForwardsNormalizedMessageToProvider(t *testing.T) {
 	}
 	request := httptest.NewRequest(http.MethodPost, "/internal/v1/messages/otp", strings.NewReader(
 		`{"destination":"+5586995922924","message":"Seu codigo TINO e 123456"}`))
+	request.Body = io.NopCloser(strings.NewReader(
+		`{"destination":"+5586995922924","message":"Seu codigo TINO e 123456","correlation_id":"challenge-1"}`))
 	request.Header.Set("X-Tino-Internal-Token", "internal")
 	response := httptest.NewRecorder()
 
@@ -80,6 +85,8 @@ func TestSendOTPMapsProviderFailureToRetryableResponse(t *testing.T) {
 	}
 	request := httptest.NewRequest(http.MethodPost, "/internal/v1/messages/otp", strings.NewReader(
 		`{"destination":"+5586995922924","message":"Seu codigo TINO e 123456"}`))
+	request.Body = io.NopCloser(strings.NewReader(
+		`{"destination":"+5586995922924","message":"Seu codigo TINO e 123456","correlation_id":"challenge-1"}`))
 	request.Header.Set("X-Tino-Internal-Token", "internal")
 	response := httptest.NewRecorder()
 
@@ -87,6 +94,110 @@ func TestSendOTPMapsProviderFailureToRetryableResponse(t *testing.T) {
 
 	if response.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusServiceUnavailable)
+	}
+}
+
+func TestSendOTPUsesCorrelationBoundButtonWhenConfigured(t *testing.T) {
+	var receivedBody string
+	provider := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		body, _ := io.ReadAll(request.Body)
+		receivedBody = string(body)
+		writer.WriteHeader(http.StatusCreated)
+	}))
+	defer provider.Close()
+
+	cfg := &config{
+		internalToken: "internal",
+		providerURL:   provider.URL,
+		providerKey:   "provider-key",
+		instance:      "tino",
+		sendPath:      "/message/sendButtons/{instance}",
+		client:        provider.Client(),
+	}
+	request := httptest.NewRequest(http.MethodPost, "/internal/v1/messages/otp", strings.NewReader(
+		`{"destination":"+5586995922924","message":"Seu codigo TINO e 123456","correlation_id":"challenge-1"}`))
+	request.Header.Set("X-Tino-Internal-Token", "internal")
+	response := httptest.NewRecorder()
+
+	cfg.sendOTP(response, request)
+
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusAccepted)
+	}
+	if !strings.Contains(receivedBody, `"id":"TINO_AUTH_CONFIRM:challenge-1"`) ||
+		!strings.Contains(receivedBody, `"number":"5586995922924"`) {
+		t.Fatalf("provider button body = %q", receivedBody)
+	}
+}
+
+func TestWebhookForwardsSignedConfirmationToBackend(t *testing.T) {
+	var receivedBody string
+	backend := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Header.Get("X-Tino-Internal-Token") != "backend-token" {
+			t.Fatalf("backend token was not forwarded")
+		}
+		body, _ := io.ReadAll(request.Body)
+		receivedBody = string(body)
+		writer.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	cfg := &config{backendURL: backend.URL, backendToken: "backend-token", webhookSecret: "webhook-secret", client: backend.Client()}
+	payload := `{"correlation_id":"challenge-1","event_type":"AUTH_CONFIRMED","provider_event_id":"event-1","provider_message_id":"message-1","sender_phone":"+5586995922924","occurred_at":"2026-09-03T12:00:00Z"}`
+	mac := hmac.New(sha256.New, []byte(cfg.webhookSecret))
+	_, _ = mac.Write([]byte(payload))
+	request := httptest.NewRequest(http.MethodPost, "/webhooks/whatsapp", strings.NewReader(payload))
+	request.Header.Set("X-Tino-Webhook-Signature", hex.EncodeToString(mac.Sum(nil)))
+	response := httptest.NewRecorder()
+
+	cfg.receiveWebhook(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if !strings.Contains(receivedBody, `"event_type":"AUTH_CONFIRMED"`) {
+		t.Fatalf("backend body = %q", receivedBody)
+	}
+}
+
+func TestWebhookRejectsUnsignedConfirmation(t *testing.T) {
+	cfg := &config{webhookSecret: "webhook-secret", client: http.DefaultClient}
+	request := httptest.NewRequest(http.MethodPost, "/webhooks/whatsapp", strings.NewReader(`{}`))
+	response := httptest.NewRecorder()
+
+	cfg.receiveWebhook(response, request)
+
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestWebhookNormalizesEvolutionButtonConfirmation(t *testing.T) {
+	var receivedBody string
+	backend := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		body, _ := io.ReadAll(request.Body)
+		receivedBody = string(body)
+		writer.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	cfg := &config{backendURL: backend.URL, backendToken: "backend-token", webhookSecret: "webhook-secret", client: backend.Client()}
+	payload := `{"event":"MESSAGES_UPSERT","instance":"tino","data":{"key":{"remoteJid":"5586995922924@s.whatsapp.net","fromMe":false,"id":"reply-1"},"message":{"buttonsResponseMessage":{"selectedButtonId":"TINO_AUTH_CONFIRM:challenge-1"}},"messageTimestamp":"1725364800","messageType":"buttonsResponseMessage"}}`
+	mac := hmac.New(sha256.New, []byte(cfg.webhookSecret))
+	_, _ = mac.Write([]byte(payload))
+	request := httptest.NewRequest(http.MethodPost, "/webhooks/whatsapp", strings.NewReader(payload))
+	request.Header.Set("X-Tino-Webhook-Signature", hex.EncodeToString(mac.Sum(nil)))
+	response := httptest.NewRecorder()
+
+	cfg.receiveWebhook(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	for _, expected := range []string{`"correlation_id":"challenge-1"`, `"event_type":"AUTH_CONFIRMED"`, `"provider_event_id":"reply-1"`, `"sender_phone":"+5586995922924"`} {
+		if !strings.Contains(receivedBody, expected) {
+			t.Fatalf("normalized body = %q, missing %s", receivedBody, expected)
+		}
 	}
 }
 

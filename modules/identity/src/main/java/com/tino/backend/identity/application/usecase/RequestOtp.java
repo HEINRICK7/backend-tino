@@ -104,7 +104,7 @@ public class RequestOtp {
     }
 
     private OtpChallengeIssued deliver(OtpChallenge challenge, String code, Instant now) {
-        var result = delivery.deliver(new OtpDeliveryPort.OtpDeliveryRequest(challenge.phone(), code));
+        var result = delivery.deliver(new OtpDeliveryPort.OtpDeliveryRequest(challenge.phone(), code, challenge.id()));
         if (result.status() != OtpDeliveryPort.Status.ACCEPTED) {
             challenges.update(challenge.deliveryFailed());
             throw new OtpDeliveryException(result.status() == OtpDeliveryPort.Status.RETRYABLE_FAILURE);

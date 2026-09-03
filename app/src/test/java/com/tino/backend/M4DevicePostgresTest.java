@@ -463,7 +463,7 @@ class M4DevicePostgresTest {
             fresh.start();
             var result = migrate(fresh).migrate();
             assertThat(result.success).isTrue();
-            assertThat(result.migrationsExecuted).isEqualTo(23);
+            assertThat(result.migrationsExecuted).isEqualTo(24);
         }
     }
 
