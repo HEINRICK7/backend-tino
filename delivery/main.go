@@ -73,6 +73,7 @@ type providerButtonMessage struct {
 }
 
 type providerButton struct {
+	Type        string `json:"type"`
 	Title       string `json:"title"`
 	DisplayText string `json:"displayText"`
 	ID          string `json:"id"`
@@ -487,6 +488,7 @@ func (c *config) sendToProvider(ctx context.Context, message otpMessage) (string
 			Description: text,
 			Footer:      "O código continua disponível como fallback.",
 			Buttons: []providerButton{{
+				Type:        "reply",
 				Title:       "Confirmar acesso",
 				DisplayText: "Confirmar acesso",
 				ID:          "TINO_AUTH_CONFIRM:" + message.CorrelationID,
