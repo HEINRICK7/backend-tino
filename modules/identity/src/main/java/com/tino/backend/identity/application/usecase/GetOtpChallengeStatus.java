@@ -37,7 +37,7 @@ public final class GetOtpChallengeStatus {
                 == com.tino.backend.identity.domain.model.OtpChallengeStatus.VERIFIED
                 && events.findByChallengeId(challengeId).isPresent();
         return new OtpChallengeStatusView(
-                challenge.id(), challenge.status().name(),
+                challenge.id(), challenge.status().canonical().name(),
                 Math.max(0, Duration.between(now, challenge.expiresAt()).toSeconds()), available);
     }
 }

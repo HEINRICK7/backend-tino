@@ -40,13 +40,15 @@ class OtpUseCaseTest {
 
         var issued = request.execute(PHONE, "127.0.0.1");
         assertThat(issued.challengeId()).isNotNull();
+        assertThat(issued.status()).isEqualTo(
+                com.tino.backend.identity.domain.model.OtpLifecycleStatus.OTP_SENT);
         assertThat(issued.toString()).doesNotContain("482731");
         assertThat(delivery.lastCode).isEqualTo("482731");
 
         var verified = new VerifyOtp(
                 repository, generator, hasher, Clock.fixed(NOW, ZoneOffset.UTC))
                 .execute(issued.challengeId(), "482731");
-        assertThat(verified.verificationStatus()).isEqualTo("VERIFIED");
+        assertThat(verified.verificationStatus()).isEqualTo("OTP_VERIFIED");
         assertThat(verified.verificationTicket()).isEqualTo("ticket-1");
 
         var proof = new ConsumeOtpVerificationTicket(
@@ -118,12 +120,12 @@ class OtpUseCaseTest {
 
         var status = new GetOtpChallengeStatus(repository, events, Clock.fixed(NOW, ZoneOffset.UTC))
                 .execute(issued.challengeId());
-        assertThat(status.status()).isEqualTo("VERIFIED");
+        assertThat(status.status()).isEqualTo("OTP_VERIFIED");
         assertThat(status.verificationAvailable()).isTrue();
 
         var verification = new IssueOtpVerificationTicket(repository, events, generator, hasher,
                 Clock.fixed(NOW, ZoneOffset.UTC)).execute(issued.challengeId());
-        assertThat(verification.verificationStatus()).isEqualTo("VERIFIED");
+        assertThat(verification.verificationStatus()).isEqualTo("OTP_VERIFIED");
         assertThat(verification.verificationTicket()).isEqualTo("ticket-1");
         assertThat(events.values).hasSize(1);
     }

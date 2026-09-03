@@ -8,6 +8,7 @@ import com.tino.backend.identity.application.port.out.OtpDeliveryPort;
 import com.tino.backend.identity.application.port.out.OtpGenerator;
 import com.tino.backend.identity.application.port.out.OtpSecretHasher;
 import com.tino.backend.identity.domain.model.OtpChallenge;
+import com.tino.backend.identity.domain.model.OtpLifecycleStatus;
 import com.tino.backend.identity.domain.model.PhoneNumber;
 import com.tino.backend.shared.kernel.UuidGenerator;
 import java.time.Clock;
@@ -113,7 +114,8 @@ public class RequestOtp {
                 challenge.id(),
                 secondsUntil(now, challenge.expiresAt()),
                 secondsUntil(now, challenge.resendAvailableAt()),
-                result.channel());
+                result.channel(),
+                OtpLifecycleStatus.OTP_SENT);
     }
 
     private static long secondsUntil(Instant now, Instant future) {

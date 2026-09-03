@@ -5,6 +5,7 @@ import com.tino.backend.identity.application.model.OtpVerificationResult;
 import com.tino.backend.identity.application.port.out.OtpChallengeRepository;
 import com.tino.backend.identity.application.port.out.OtpGenerator;
 import com.tino.backend.identity.application.port.out.OtpSecretHasher;
+import com.tino.backend.identity.domain.model.OtpLifecycleStatus;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -63,7 +64,7 @@ public class VerifyOtp {
         var ticketExpiry = now.plus(TICKET_LIFETIME);
         challenges.update(challenge.verified(hasher.hashTicket(ticket), now, ticketExpiry));
         return new OtpVerificationResult(
-                challenge.id(), "VERIFIED", ticket, TICKET_LIFETIME.toSeconds());
+                challenge.id(), OtpLifecycleStatus.OTP_VERIFIED.name(), ticket, TICKET_LIFETIME.toSeconds());
     }
 
     private static boolean constantTimeEquals(String left, String right) {
