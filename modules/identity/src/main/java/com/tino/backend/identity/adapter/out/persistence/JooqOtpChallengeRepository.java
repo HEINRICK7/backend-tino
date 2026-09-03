@@ -35,6 +35,8 @@ public class JooqOtpChallengeRepository implements OtpChallengeRepository {
     private static final Field<Integer> MAX_RESENDS = DSL.field(DSL.name("max_resends"), Integer.class);
     private static final Field<OffsetDateTime> RESEND_AVAILABLE_AT =
             DSL.field(DSL.name("resend_available_at"), OffsetDateTime.class);
+    private static final Field<String> PROVIDER_MESSAGE_ID =
+            DSL.field(DSL.name("provider_message_id"), String.class);
     private static final Field<OffsetDateTime> CREATED_AT = DSL.field(DSL.name("created_at"), OffsetDateTime.class);
     private static final Field<OffsetDateTime> VERIFIED_AT = DSL.field(DSL.name("verified_at"), OffsetDateTime.class);
     private static final Field<OffsetDateTime> CONSUMED_AT = DSL.field(DSL.name("consumed_at"), OffsetDateTime.class);
@@ -64,7 +66,8 @@ public class JooqOtpChallengeRepository implements OtpChallengeRepository {
         try {
             return dsl.select(CHALLENGES.fields())
                     .from(CHALLENGES)
-                    .where(PHONE_HASH.eq(phoneHash).and(STATUS.eq(OtpChallengeStatus.PENDING.name())))
+                    .where(PHONE_HASH.eq(phoneHash).and(STATUS.in(
+                            OtpChallengeStatus.PENDING.name(), OtpChallengeStatus.DELIVERED.name())))
                     .orderBy(CREATED_AT.desc())
                     .limit(1)
                     .fetchOptional(JooqOtpChallengeRepository::toDomain);
@@ -106,8 +109,10 @@ public class JooqOtpChallengeRepository implements OtpChallengeRepository {
                             challenge.requestOriginHash(), challenge.codeVerifier(), challenge.status().name(),
                             time(challenge.expiresAt()), challenge.attemptCount(), challenge.maxAttempts(),
                             challenge.resendCount(), challenge.maxResends(), time(challenge.resendAvailableAt()),
-                            time(challenge.createdAt()), time(challenge.verifiedAt()), time(challenge.consumedAt()),
-                            challenge.verificationTicketHash(), time(challenge.verificationTicketExpiresAt()))
+                            time(challenge.createdAt()),
+                            time(challenge.verifiedAt()), time(challenge.consumedAt()),
+                            challenge.verificationTicketHash(), time(challenge.verificationTicketExpiresAt()),
+                            challenge.providerMessageId())
                     .execute();
         } catch (RuntimeException exception) {
             throw new OtpPersistenceException(exception);
@@ -144,6 +149,20 @@ public class JooqOtpChallengeRepository implements OtpChallengeRepository {
 
     @Override
     @Transactional
+    public Optional<OtpChallenge> findByProviderMessageIdForUpdate(String providerMessageId) {
+        try {
+            return dsl.select(CHALLENGES.fields())
+                    .from(CHALLENGES)
+                    .where(PROVIDER_MESSAGE_ID.eq(providerMessageId))
+                    .forUpdate()
+                    .fetchOptional(JooqOtpChallengeRepository::toDomain);
+        } catch (RuntimeException exception) {
+            throw new OtpPersistenceException(exception);
+        }
+    }
+
+    @Override
+    @Transactional
     public void update(OtpChallenge challenge) {
         try {
             dsl.update(CHALLENGES)
@@ -153,6 +172,7 @@ public class JooqOtpChallengeRepository implements OtpChallengeRepository {
                     .set(ATTEMPT_COUNT, challenge.attemptCount())
                     .set(RESEND_COUNT, challenge.resendCount())
                     .set(RESEND_AVAILABLE_AT, time(challenge.resendAvailableAt()))
+                    .set(PROVIDER_MESSAGE_ID, challenge.providerMessageId())
                     .set(VERIFIED_AT, time(challenge.verifiedAt()))
                     .set(CONSUMED_AT, time(challenge.consumedAt()))
                     .set(TICKET_HASH, challenge.verificationTicketHash())
@@ -197,6 +217,7 @@ public class JooqOtpChallengeRepository implements OtpChallengeRepository {
                     record.get(RESEND_COUNT),
                     record.get(MAX_RESENDS),
                     instant(record.get(RESEND_AVAILABLE_AT)),
+                    record.get(PROVIDER_MESSAGE_ID),
                     instant(record.get(CREATED_AT)),
                     instant(record.get(VERIFIED_AT)),
                     instant(record.get(CONSUMED_AT)),

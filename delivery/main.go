@@ -26,6 +26,7 @@ type config struct {
 	backendToken  string
 	webhookSecret string
 	webhookToken  string
+	masterPhone   string
 	providerURL   string
 	providerKey   string
 	instance      string
@@ -34,9 +35,11 @@ type config struct {
 }
 
 type otpMessage struct {
-	Destination   string `json:"destination"`
-	Message       string `json:"message"`
-	CorrelationID string `json:"correlation_id"`
+	Recipient      string `json:"recipient"`
+	Template       string `json:"template"`
+	Code           string `json:"code"`
+	ExpiresMinutes int    `json:"expires_minutes"`
+	CorrelationID  string `json:"correlation_id"`
 }
 
 type confirmationEvent struct {
@@ -45,6 +48,14 @@ type confirmationEvent struct {
 	ProviderEventID   string `json:"provider_event_id"`
 	ProviderMessageID string `json:"provider_message_id"`
 	SenderPhone       string `json:"sender_phone"`
+	OccurredAt        string `json:"occurred_at"`
+}
+
+type deliveryEvent struct {
+	ProviderEventID   string `json:"provider_event_id"`
+	ProviderMessageID string `json:"provider_message_id"`
+	EventType         string `json:"event_type"`
+	RecipientPhone    string `json:"recipient_phone"`
 	OccurredAt        string `json:"occurred_at"`
 }
 
@@ -77,6 +88,9 @@ type evolutionMessage struct {
 	Message          json.RawMessage     `json:"message"`
 	MessageTimestamp json.RawMessage     `json:"messageTimestamp"`
 	MessageType      string              `json:"messageType"`
+	Update           struct {
+		Status json.RawMessage `json:"status"`
+	} `json:"update"`
 }
 
 type evolutionMessageKey struct {
@@ -104,8 +118,9 @@ type evolutionInboundContent struct {
 }
 
 type result struct {
-	Status   string `json:"status"`
-	Provider string `json:"provider"`
+	Status            string `json:"status"`
+	Provider          string `json:"provider"`
+	ProviderMessageID string `json:"provider_message_id,omitempty"`
 }
 
 func main() {
@@ -137,6 +152,7 @@ func loadConfig() *config {
 		backendToken:  valueOr(os.Getenv("TINO_OTP_BACKEND_TOKEN"), os.Getenv("TINO_OTP_INTERNAL_TOKEN")),
 		webhookSecret: os.Getenv("WA_EVOLUTION_WEBHOOK_SECRET"),
 		webhookToken:  os.Getenv("WA_EVOLUTION_WEBHOOK_TOKEN"),
+		masterPhone:   normalizeWhatsAppPhone(valueOr(os.Getenv("WA_EVOLUTION_MASTER_PHONE"), "+5586994209350")),
 		providerURL:   strings.TrimRight(os.Getenv("WA_EVOLUTION_BASE_URL"), "/"),
 		providerKey:   os.Getenv("WA_EVOLUTION_API_KEY"),
 		instance:      os.Getenv("WA_EVOLUTION_INSTANCE"),
@@ -190,15 +206,15 @@ func (c *config) sendOTP(w http.ResponseWriter, r *http.Request) {
 
 	var message otpMessage
 	decoder := json.NewDecoder(io.LimitReader(r.Body, 4096))
-	if err := decoder.Decode(&message); err != nil || !validMessage(message) {
+	if err := decoder.Decode(&message); err != nil || !validMessage(message, c.masterPhone) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	status := c.sendToProvider(r.Context(), message)
+	status, providerMessageID := c.sendToProvider(r.Context(), message)
 	switch status {
 	case "ACCEPTED":
-		writeResult(w, http.StatusAccepted, result{Status: status, Provider: "WA_EVOLUTION"})
+		writeResult(w, http.StatusAccepted, result{Status: status, Provider: "WA_EVOLUTION", ProviderMessageID: providerMessageID})
 	case "RETRYABLE_FAILURE":
 		writeResult(w, http.StatusServiceUnavailable, result{Status: status, Provider: "WA_EVOLUTION"})
 	default:
@@ -210,9 +226,14 @@ func (c *config) authorized(supplied string) bool {
 	return supplied != "" && subtle.ConstantTimeCompare([]byte(c.internalToken), []byte(supplied)) == 1
 }
 
-func validMessage(message otpMessage) bool {
-	return brazilianPhone.MatchString(message.Destination) && len(message.Message) >= 1 && len(message.Message) <= 200 && safeCorrelationID(message.CorrelationID)
+func validMessage(message otpMessage, masterPhone string) bool {
+	return brazilianPhone.MatchString(message.Recipient) && message.Recipient != masterPhone &&
+		message.Template == "AUTH_OTP" && len(message.Code) == 6 && codePattern.MatchString(message.Code) &&
+		message.ExpiresMinutes > 0 && message.ExpiresMinutes <= 15 &&
+		safeCorrelationID(message.CorrelationID)
 }
+
+var codePattern = regexp.MustCompile(`^[0-9]{6}$`)
 
 func safeCorrelationID(value string) bool {
 	if value == "" || len(value) > 100 {
@@ -238,23 +259,35 @@ func (c *config) receiveWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var event confirmationEvent
+	var delivery deliveryEvent
+	callbackPath := "/internal/v1/identity/otp/events"
 	if normalized, ok := normalizeConfirmationEvent(body); ok {
 		event = normalized
+	} else if normalized, ok := normalizeDeliveryEvent(body); ok {
+		delivery = normalized
+		callbackPath = "/internal/v1/identity/otp/delivery-events"
 	} else if err := json.Unmarshal(body, &event); err != nil || !validConfirmationEvent(event) {
-		w.WriteHeader(http.StatusBadRequest)
-		return
+		if err := json.Unmarshal(body, &delivery); err != nil || !validDeliveryEvent(delivery) {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		callbackPath = "/internal/v1/identity/otp/delivery-events"
 	}
 	if c.backendToken == "" || c.backendURL == "" {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		return
 	}
-	body, err = json.Marshal(event)
+	var callback any = event
+	if callbackPath != "/internal/v1/identity/otp/events" {
+		callback = delivery
+	}
+	body, err = json.Marshal(callback)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 	request, err := http.NewRequestWithContext(r.Context(), http.MethodPost,
-		strings.TrimRight(c.backendURL, "/")+"/internal/v1/identity/otp/events", strings.NewReader(string(body)))
+		strings.TrimRight(c.backendURL, "/")+callbackPath, strings.NewReader(string(body)))
 	if err != nil {
 		w.WriteHeader(http.StatusBadGateway)
 		return
@@ -286,6 +319,14 @@ func validConfirmationEvent(event confirmationEvent) bool {
 		event.ProviderEventID != "" && len(event.ProviderEventID) <= 200 &&
 		event.ProviderMessageID != "" && len(event.ProviderMessageID) <= 200 &&
 		brazilianPhone.MatchString(event.SenderPhone) && timestampError == nil
+}
+
+func validDeliveryEvent(event deliveryEvent) bool {
+	_, timestampError := time.Parse(time.RFC3339, event.OccurredAt)
+	return event.ProviderEventID != "" && len(event.ProviderEventID) <= 200 &&
+		event.ProviderMessageID != "" && len(event.ProviderMessageID) <= 200 &&
+		(event.EventType == "AUTH_DELIVERED" || event.EventType == "AUTH_DELIVERY_FAILED") &&
+		brazilianPhone.MatchString(event.RecipientPhone) && timestampError == nil
 }
 
 func (c *config) validWebhookSignature(signature string, payload []byte) bool {
@@ -346,6 +387,57 @@ func normalizeConfirmationEvent(payload []byte) (confirmationEvent, bool) {
 	return event, validConfirmationEvent(event)
 }
 
+func normalizeDeliveryEvent(payload []byte) (deliveryEvent, bool) {
+	var direct deliveryEvent
+	if json.Unmarshal(payload, &direct) == nil && validDeliveryEvent(direct) {
+		return direct, true
+	}
+	var webhook evolutionWebhook
+	if json.Unmarshal(payload, &webhook) != nil || !webhook.Data.Key.FromMe ||
+		(webhook.Event != "" && !strings.EqualFold(webhook.Event, "MESSAGES_UPDATE") &&
+			!strings.EqualFold(webhook.Event, "messages.update")) {
+		return deliveryEvent{}, false
+	}
+	status := evolutionDeliveryStatus(webhook.Data.Update.Status)
+	if webhook.Data.Key.ID == "" || status == 0 {
+		return deliveryEvent{}, false
+	}
+	eventType := "AUTH_DELIVERY_FAILED"
+	if status >= 4 {
+		eventType = "AUTH_DELIVERED"
+	}
+	digest := sha256.Sum256(payload)
+	event := deliveryEvent{
+		ProviderEventID:   hex.EncodeToString(digest[:]),
+		ProviderMessageID: webhook.Data.Key.ID,
+		EventType:         eventType,
+		RecipientPhone:    normalizeWhatsAppPhone(webhook.Data.Key.RemoteJID),
+		OccurredAt:        evolutionOccurredAt(webhook.Data.MessageTimestamp),
+	}
+	return event, validDeliveryEvent(event)
+}
+
+func evolutionDeliveryStatus(raw json.RawMessage) int {
+	var numeric int
+	if json.Unmarshal(raw, &numeric) == nil {
+		return numeric
+	}
+	var value string
+	if json.Unmarshal(raw, &value) == nil {
+		switch strings.ToUpper(value) {
+		case "ERROR":
+			return 1
+		case "PENDING":
+			return 2
+		case "SERVER_ACK":
+			return 3
+		case "DELIVERY_ACK", "READ", "PLAYED":
+			return 4
+		}
+	}
+	return 0
+}
+
 func firstNonBlank(values ...string) string {
 	for _, value := range values {
 		if strings.TrimSpace(value) != "" {
@@ -384,14 +476,15 @@ func evolutionOccurredAt(raw json.RawMessage) string {
 	return ""
 }
 
-func (c *config) sendToProvider(ctx context.Context, message otpMessage) string {
+func (c *config) sendToProvider(ctx context.Context, message otpMessage) (string, string) {
 	path := strings.ReplaceAll(c.sendPath, "{instance}", c.instance)
-	var requestBody any = providerMessage{Number: strings.TrimPrefix(message.Destination, "+"), Text: message.Message}
+	text := "Seu código TINO é " + message.Code + ". Expira em " + strconv.Itoa(message.ExpiresMinutes) + " min."
+	var requestBody any = providerMessage{Number: strings.TrimPrefix(message.Recipient, "+"), Text: text}
 	if strings.Contains(strings.ToLower(c.sendPath), "sendbuttons") {
 		requestBody = providerButtonMessage{
-			Number:      strings.TrimPrefix(message.Destination, "+"),
+			Number:      strings.TrimPrefix(message.Recipient, "+"),
 			Title:       "Confirme seu acesso ao TINO",
-			Description: message.Message,
+			Description: text,
 			Footer:      "O código continua disponível como fallback.",
 			Buttons: []providerButton{{
 				Title:       "Confirmar acesso",
@@ -402,28 +495,36 @@ func (c *config) sendToProvider(ctx context.Context, message otpMessage) string 
 	}
 	body, err := json.Marshal(requestBody)
 	if err != nil {
-		return "PERMANENT_FAILURE"
+		return "PERMANENT_FAILURE", ""
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.providerURL+path, strings.NewReader(string(body)))
 	if err != nil {
-		return "PERMANENT_FAILURE"
+		return "PERMANENT_FAILURE", ""
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("apikey", c.providerKey)
 	response, err := c.client.Do(request)
 	if err != nil {
-		return "RETRYABLE_FAILURE"
+		return "RETRYABLE_FAILURE", ""
 	}
 	defer response.Body.Close()
-	_, _ = io.Copy(io.Discard, response.Body)
+	responseBody, _ := io.ReadAll(io.LimitReader(response.Body, 16*1024))
 	if response.StatusCode >= 200 && response.StatusCode < 300 {
-		return "ACCEPTED"
+		var sent struct {
+			Key struct {
+				ID string `json:"id"`
+			} `json:"key"`
+		}
+		if json.Unmarshal(responseBody, &sent) != nil || sent.Key.ID == "" {
+			return "RETRYABLE_FAILURE", ""
+		}
+		return "ACCEPTED", sent.Key.ID
 	}
 	if response.StatusCode == 408 || response.StatusCode == 429 || response.StatusCode >= 500 {
-		return "RETRYABLE_FAILURE"
+		return "RETRYABLE_FAILURE", ""
 	}
-	return "PERMANENT_FAILURE"
+	return "PERMANENT_FAILURE", ""
 }
 
 func writeResult(w http.ResponseWriter, status int, value result) {

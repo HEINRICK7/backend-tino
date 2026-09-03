@@ -26,7 +26,8 @@ public final class CancelOtp {
         }
         var challenge = challenges.findByIdForUpdate(challengeId)
                 .orElseThrow(() -> new IllegalArgumentException("unknown OTP challenge"));
-        if (challenge.status() == OtpChallengeStatus.PENDING) {
+        if (challenge.status() == OtpChallengeStatus.PENDING
+                || challenge.status() == OtpChallengeStatus.DELIVERED) {
             var now = Instant.now(clock);
             challenges.update(challenge.isExpired(now) ? challenge.expired() : challenge.cancelled());
         }

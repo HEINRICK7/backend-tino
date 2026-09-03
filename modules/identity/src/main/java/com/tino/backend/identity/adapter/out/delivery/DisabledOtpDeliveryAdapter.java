@@ -6,6 +6,6 @@ import com.tino.backend.identity.application.port.out.OtpDeliveryPort;
 public final class DisabledOtpDeliveryAdapter implements OtpDeliveryPort {
     @Override
     public OtpDeliveryResult deliver(OtpDeliveryRequest request) {
-        return new OtpDeliveryResult(Status.PERMANENT_FAILURE, Channel.NONE);
+        return new OtpDeliveryResult(Status.PERMANENT_FAILURE, Channel.NONE, null);
     }
 }

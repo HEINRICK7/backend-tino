@@ -28,7 +28,8 @@ public final class GetOtpChallengeStatus {
         var challenge = challenges.findByIdForUpdate(challengeId)
                 .orElseThrow(() -> new OtpVerificationException(OtpVerificationException.Reason.INVALID));
         var now = Instant.now(clock);
-        if (challenge.status() == com.tino.backend.identity.domain.model.OtpChallengeStatus.PENDING
+        if ((challenge.status() == com.tino.backend.identity.domain.model.OtpChallengeStatus.PENDING
+                || challenge.status() == com.tino.backend.identity.domain.model.OtpChallengeStatus.DELIVERED)
                 && challenge.isExpired(now)) {
             challenge = challenge.expired();
             challenges.update(challenge);
