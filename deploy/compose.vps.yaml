@@ -126,10 +126,14 @@ services:
     image: ${TINO_DELIVERY_IMAGE:-ghcr.io/heinrick7/backend-tino-delivery:local}
     environment:
       TINO_INTERNAL_TOKEN: ${TINO_OTP_DELIVERY_INTERNAL_TOKEN:-}
+      TINO_OTP_BACKEND_URL: ${TINO_OTP_BACKEND_URL:-http://app:8080}
+      TINO_OTP_BACKEND_TOKEN: ${TINO_OTP_INTERNAL_TOKEN:-}
+      WA_EVOLUTION_WEBHOOK_SECRET: ${WA_EVOLUTION_WEBHOOK_SECRET:-}
+      WA_EVOLUTION_WEBHOOK_TOKEN: ${WA_EVOLUTION_WEBHOOK_TOKEN:-}
       WA_EVOLUTION_BASE_URL: ${WA_EVOLUTION_BASE_URL:-}
       WA_EVOLUTION_API_KEY: ${WA_EVOLUTION_API_KEY:-}
       WA_EVOLUTION_INSTANCE: ${WA_EVOLUTION_INSTANCE:-}
-      WA_EVOLUTION_SEND_PATH: ${WA_EVOLUTION_SEND_PATH:-/message/sendText/{instance}}
+      WA_EVOLUTION_SEND_PATH: ${WA_EVOLUTION_SEND_PATH:-/message/sendButtons/{instance}}
     expose: ["8080"]
     init: true
     read_only: true

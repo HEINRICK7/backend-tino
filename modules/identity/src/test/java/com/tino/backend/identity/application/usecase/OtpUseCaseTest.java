@@ -10,8 +10,10 @@ import com.tino.backend.identity.application.port.out.OtpChallengeRepository;
 import com.tino.backend.identity.application.port.out.OtpDeliveryPort;
 import com.tino.backend.identity.application.port.out.OtpGenerator;
 import com.tino.backend.identity.application.port.out.OtpSecretHasher;
+import com.tino.backend.identity.application.port.out.OtpVerificationEventRepository;
 import com.tino.backend.identity.application.model.OtpIdentityProof;
 import com.tino.backend.identity.domain.model.OtpChallenge;
+import com.tino.backend.identity.domain.model.OtpVerificationEvent;
 import com.tino.backend.shared.kernel.UuidGenerator;
 import java.time.Clock;
 import java.time.Instant;
@@ -99,6 +101,50 @@ class OtpUseCaseTest {
                 .isInstanceOf(OtpRateLimitedException.class);
     }
 
+    @Test
+    void whatsappConfirmationIsIdempotentAndIssuesTheNormalKeycloakTicket() {
+        var repository = new InMemoryChallenges();
+        var events = new InMemoryVerificationEvents();
+        var generator = new FixedGenerator();
+        var hasher = new HmacOtpSecretHasher("test-only-secret");
+        var issued = request(repository, new CapturingDelivery(), generator, hasher)
+                .execute(PHONE, "127.0.0.1");
+        var confirm = new ConfirmOtpFromWhatsApp(repository, events, Clock.fixed(NOW, ZoneOffset.UTC));
+
+        assertThat(confirm.execute(issued.challengeId(), "AUTH_CONFIRMED", "event-1", "message-1",
+                PHONE, NOW)).isEqualTo(com.tino.backend.identity.domain.model.OtpChallengeStatus.VERIFIED);
+        assertThat(confirm.execute(issued.challengeId(), "AUTH_CONFIRMED", "event-1", "message-1",
+                PHONE, NOW)).isEqualTo(com.tino.backend.identity.domain.model.OtpChallengeStatus.VERIFIED);
+
+        var status = new GetOtpChallengeStatus(repository, events, Clock.fixed(NOW, ZoneOffset.UTC))
+                .execute(issued.challengeId());
+        assertThat(status.status()).isEqualTo("VERIFIED");
+        assertThat(status.verificationAvailable()).isTrue();
+
+        var verification = new IssueOtpVerificationTicket(repository, events, generator, hasher,
+                Clock.fixed(NOW, ZoneOffset.UTC)).execute(issued.challengeId());
+        assertThat(verification.verificationStatus()).isEqualTo("VERIFIED");
+        assertThat(verification.verificationTicket()).isEqualTo("ticket-1");
+        assertThat(events.values).hasSize(1);
+    }
+
+    @Test
+    void whatsappConfirmationRejectsADifferentSender() {
+        var repository = new InMemoryChallenges();
+        var events = new InMemoryVerificationEvents();
+        var hasher = new HmacOtpSecretHasher("test-only-secret");
+        var issued = request(repository, new CapturingDelivery(), new FixedGenerator(), hasher)
+                .execute(PHONE, "127.0.0.1");
+
+        assertThatThrownBy(() -> new ConfirmOtpFromWhatsApp(repository, events, Clock.fixed(NOW, ZoneOffset.UTC))
+                .execute(issued.challengeId(), "AUTH_CONFIRMED", "event-2", "message-2",
+                        "+5586995999999", NOW))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("WhatsApp sender does not match challenge");
+        assertThat(repository.findByIdForUpdate(issued.challengeId()).orElseThrow().status())
+                .isEqualTo(com.tino.backend.identity.domain.model.OtpChallengeStatus.PENDING);
+    }
+
     private static RequestOtp request(
             InMemoryChallenges repository,
             CapturingDelivery delivery,
@@ -182,6 +228,25 @@ class OtpUseCaseTest {
             ids.removeIf(id -> values.get(id).expiresAt().isAfter(before));
             ids.forEach(values::remove);
             return ids.size();
+        }
+    }
+
+    private static final class InMemoryVerificationEvents implements OtpVerificationEventRepository {
+        private final Map<String, OtpVerificationEvent> values = new HashMap<>();
+
+        @Override
+        public Optional<OtpVerificationEvent> findByProviderEventId(String providerEventId) {
+            return Optional.ofNullable(values.get(providerEventId));
+        }
+
+        @Override
+        public Optional<OtpVerificationEvent> findByChallengeId(UUID challengeId) {
+            return values.values().stream().filter(event -> event.challengeId().equals(challengeId)).findFirst();
+        }
+
+        @Override
+        public void insert(OtpVerificationEvent event) {
+            values.put(event.providerEventId(), event);
         }
     }
 }

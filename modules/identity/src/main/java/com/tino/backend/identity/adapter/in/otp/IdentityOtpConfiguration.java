@@ -8,7 +8,11 @@ import com.tino.backend.identity.application.port.out.OtpChallengeRepository;
 import com.tino.backend.identity.application.port.out.OtpDeliveryPort;
 import com.tino.backend.identity.application.port.out.OtpGenerator;
 import com.tino.backend.identity.application.port.out.OtpSecretHasher;
+import com.tino.backend.identity.application.port.out.OtpVerificationEventRepository;
 import com.tino.backend.identity.application.usecase.ConsumeOtpVerificationTicket;
+import com.tino.backend.identity.application.usecase.ConfirmOtpFromWhatsApp;
+import com.tino.backend.identity.application.usecase.GetOtpChallengeStatus;
+import com.tino.backend.identity.application.usecase.IssueOtpVerificationTicket;
 import com.tino.backend.identity.application.usecase.RequestOtp;
 import com.tino.backend.identity.application.usecase.VerifyOtp;
 import com.tino.backend.shared.kernel.UuidGenerator;
@@ -103,5 +107,24 @@ public class IdentityOtpConfiguration {
     @Bean
     OtpChallengeCleanup otpChallengeCleanup(OtpChallengeRepository challenges, Clock clock) {
         return new OtpChallengeCleanup(challenges, clock);
+    }
+
+    @Bean
+    GetOtpChallengeStatus getOtpChallengeStatus(
+            OtpChallengeRepository challenges, OtpVerificationEventRepository events, Clock clock) {
+        return new GetOtpChallengeStatus(challenges, events, clock);
+    }
+
+    @Bean
+    ConfirmOtpFromWhatsApp confirmOtpFromWhatsApp(
+            OtpChallengeRepository challenges, OtpVerificationEventRepository events, Clock clock) {
+        return new ConfirmOtpFromWhatsApp(challenges, events, clock);
+    }
+
+    @Bean
+    IssueOtpVerificationTicket issueOtpVerificationTicket(
+            OtpChallengeRepository challenges, OtpVerificationEventRepository events,
+            OtpGenerator generator, OtpSecretHasher hasher, Clock clock) {
+        return new IssueOtpVerificationTicket(challenges, events, generator, hasher, clock);
     }
 }
