@@ -115,6 +115,8 @@ class OtpUseCaseTest {
 
         assertThat(confirm.execute(issued.challengeId(), "AUTH_CONFIRMED", "event-1", "message-1",
                 PHONE, NOW)).isEqualTo(com.tino.backend.identity.domain.model.OtpChallengeStatus.VERIFIED);
+        assertThat(confirm.execute(issued.challengeId(), "AUTH_CONFIRMED", "event-2", "message-2",
+                PHONE, NOW)).isEqualTo(com.tino.backend.identity.domain.model.OtpChallengeStatus.VERIFIED);
         assertThat(confirm.execute(issued.challengeId(), "AUTH_CONFIRMED", "event-1", "message-1",
                 PHONE, NOW)).isEqualTo(com.tino.backend.identity.domain.model.OtpChallengeStatus.VERIFIED);
 
@@ -128,6 +130,25 @@ class OtpUseCaseTest {
         assertThat(verification.verificationStatus()).isEqualTo("OTP_VERIFIED");
         assertThat(verification.verificationTicket()).isEqualTo("ticket-1");
         assertThat(events.values).hasSize(1);
+    }
+
+    @Test
+    void pendingChallengeCanBeCancelledAndCannotBeVerifiedAfterwards() {
+        var repository = new InMemoryChallenges();
+        var events = new InMemoryVerificationEvents();
+        var issued = request(repository, new CapturingDelivery(), new FixedGenerator(),
+                new HmacOtpSecretHasher("test-only-secret")).execute(PHONE, "127.0.0.1");
+
+        var status = new CancelOtp(repository,
+                new GetOtpChallengeStatus(repository, events, Clock.fixed(NOW, ZoneOffset.UTC)),
+                Clock.fixed(NOW, ZoneOffset.UTC)).execute(issued.challengeId());
+
+        assertThat(status.status()).isEqualTo("OTP_CANCELLED");
+        assertThatThrownBy(() -> new ConfirmOtpFromWhatsApp(repository, events,
+                Clock.fixed(NOW, ZoneOffset.UTC)).execute(issued.challengeId(), "AUTH_CONFIRMED",
+                        "event-1", "message-1", PHONE, NOW))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("OTP challenge is not pending");
     }
 
     @Test

@@ -38,7 +38,7 @@ public class OtpWebhookController {
         if (event == null) return ResponseEntity.badRequest().build();
         var status = confirm.execute(event.correlationId(), event.eventType(), event.providerEventId(),
                 event.providerMessageId(), event.senderPhone(), event.occurredAt());
-        return ResponseEntity.ok(new EventResponse(event.correlationId(), status.name()));
+        return ResponseEntity.ok(new EventResponse(event.correlationId(), status.canonical().name()));
     }
 
     private boolean matches(String suppliedToken) {

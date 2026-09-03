@@ -43,7 +43,7 @@ public class VerifyOtp {
             case CONSUMED, VERIFIED -> throw new OtpVerificationException(
                     OtpVerificationException.Reason.ALREADY_USED);
             case LOCKED -> throw new OtpVerificationException(OtpVerificationException.Reason.LOCKED);
-            case EXPIRED, DELIVERY_FAILED -> throw new OtpVerificationException(
+            case EXPIRED, DELIVERY_FAILED, CANCELLED -> throw new OtpVerificationException(
                     OtpVerificationException.Reason.EXPIRED);
             case PENDING -> { }
         }

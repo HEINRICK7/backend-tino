@@ -142,6 +142,10 @@ public record OtpChallenge(
         return withStatus(OtpChallengeStatus.DELIVERY_FAILED, verifiedAt, consumedAt);
     }
 
+    public OtpChallenge cancelled() {
+        return withStatus(OtpChallengeStatus.CANCELLED, verifiedAt, consumedAt);
+    }
+
     private static void requireText(String value, String name) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(name + " is required");

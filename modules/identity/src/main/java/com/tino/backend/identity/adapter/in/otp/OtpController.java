@@ -4,6 +4,7 @@ import com.tino.backend.identity.application.model.OtpChallengeIssued;
 import com.tino.backend.identity.application.model.OtpVerificationResult;
 import com.tino.backend.identity.application.model.OtpChallengeStatusView;
 import com.tino.backend.identity.application.usecase.GetOtpChallengeStatus;
+import com.tino.backend.identity.application.usecase.CancelOtp;
 import com.tino.backend.identity.application.usecase.IssueOtpVerificationTicket;
 import com.tino.backend.identity.application.usecase.RequestOtp;
 import com.tino.backend.identity.application.usecase.VerifyOtp;
@@ -14,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -27,13 +29,15 @@ public class OtpController {
     private final VerifyOtp verifyOtp;
     private final GetOtpChallengeStatus getStatus;
     private final IssueOtpVerificationTicket issueTicket;
+    private final CancelOtp cancelOtp;
 
     public OtpController(RequestOtp requestOtp, VerifyOtp verifyOtp,
-            GetOtpChallengeStatus getStatus, IssueOtpVerificationTicket issueTicket) {
+            GetOtpChallengeStatus getStatus, IssueOtpVerificationTicket issueTicket, CancelOtp cancelOtp) {
         this.requestOtp = requestOtp;
         this.verifyOtp = verifyOtp;
         this.getStatus = getStatus;
         this.issueTicket = issueTicket;
+        this.cancelOtp = cancelOtp;
     }
 
     @PostMapping("/challenges")
@@ -70,6 +74,12 @@ public class OtpController {
     @Transactional
     public OtpVerificationResult claim(@PathVariable UUID challengeId) {
         return issueTicket.execute(challengeId);
+    }
+
+    @DeleteMapping("/challenges/{challengeId}")
+    @Transactional
+    public OtpChallengeStatusView cancel(@PathVariable UUID challengeId) {
+        return cancelOtp.execute(challengeId);
     }
 
     public record Request(String phone) {}

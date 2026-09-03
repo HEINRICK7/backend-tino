@@ -7,7 +7,8 @@ public enum OtpChallengeStatus {
     EXPIRED,
     LOCKED,
     CONSUMED,
-    DELIVERY_FAILED;
+    DELIVERY_FAILED,
+    CANCELLED;
 
     /** Maps storage-compatible states to the provider-neutral public lifecycle. */
     public OtpLifecycleStatus canonical() {
@@ -17,6 +18,7 @@ public enum OtpChallengeStatus {
             case EXPIRED -> OtpLifecycleStatus.OTP_EXPIRED;
             case LOCKED -> OtpLifecycleStatus.OTP_RATE_LIMITED;
             case DELIVERY_FAILED -> OtpLifecycleStatus.OTP_FAILED;
+            case CANCELLED -> OtpLifecycleStatus.OTP_CANCELLED;
         };
     }
 }

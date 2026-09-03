@@ -10,6 +10,7 @@ import com.tino.backend.identity.application.port.out.OtpGenerator;
 import com.tino.backend.identity.application.port.out.OtpSecretHasher;
 import com.tino.backend.identity.application.port.out.OtpVerificationEventRepository;
 import com.tino.backend.identity.application.usecase.ConsumeOtpVerificationTicket;
+import com.tino.backend.identity.application.usecase.CancelOtp;
 import com.tino.backend.identity.application.usecase.ConfirmOtpFromWhatsApp;
 import com.tino.backend.identity.application.usecase.GetOtpChallengeStatus;
 import com.tino.backend.identity.application.usecase.IssueOtpVerificationTicket;
@@ -113,6 +114,11 @@ public class IdentityOtpConfiguration {
     GetOtpChallengeStatus getOtpChallengeStatus(
             OtpChallengeRepository challenges, OtpVerificationEventRepository events, Clock clock) {
         return new GetOtpChallengeStatus(challenges, events, clock);
+    }
+
+    @Bean
+    CancelOtp cancelOtp(OtpChallengeRepository challenges, GetOtpChallengeStatus getStatus, Clock clock) {
+        return new CancelOtp(challenges, getStatus, clock);
     }
 
     @Bean

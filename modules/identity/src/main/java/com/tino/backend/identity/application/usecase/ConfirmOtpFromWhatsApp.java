@@ -39,17 +39,20 @@ public final class ConfirmOtpFromWhatsApp {
             }
             return challenge.status();
         }
-        if (challenge.status() != OtpChallengeStatus.PENDING) {
-            throw new IllegalArgumentException("OTP challenge is not pending");
-        }
         var now = Instant.now(clock);
-        if (challenge.isExpired(now)) {
-            challenges.update(challenge.expired());
-            throw new IllegalArgumentException("OTP challenge expired");
-        }
         var sender = PhoneNumber.normalize(senderPhone);
         if (!challenge.phone().equals(sender)) {
             throw new IllegalArgumentException("WhatsApp sender does not match challenge");
+        }
+        if (challenge.status() == OtpChallengeStatus.VERIFIED) {
+            return OtpChallengeStatus.VERIFIED;
+        }
+        if (challenge.status() != OtpChallengeStatus.PENDING) {
+            throw new IllegalArgumentException("OTP challenge is not pending");
+        }
+        if (challenge.isExpired(now)) {
+            challenges.update(challenge.expired());
+            throw new IllegalArgumentException("OTP challenge expired");
         }
         events.insert(new OtpVerificationEvent(providerEventId, challengeId, providerMessageId,
                 sender, occurredAt, now));

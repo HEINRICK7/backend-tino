@@ -173,7 +173,8 @@ public class JooqOtpChallengeRepository implements OtpChallengeRepository {
                                     OtpChallengeStatus.EXPIRED.name(),
                                     OtpChallengeStatus.LOCKED.name(),
                                     OtpChallengeStatus.CONSUMED.name(),
-                                    OtpChallengeStatus.DELIVERY_FAILED.name())
+                                    OtpChallengeStatus.DELIVERY_FAILED.name(),
+                                    OtpChallengeStatus.CANCELLED.name())
                             .and(EXPIRES_AT.lt(time(before))))
                     .execute();
         } catch (RuntimeException exception) {
