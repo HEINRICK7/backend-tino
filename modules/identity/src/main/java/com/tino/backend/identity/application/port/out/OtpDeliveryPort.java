@@ -7,18 +7,27 @@ import java.util.UUID;
 public interface OtpDeliveryPort {
     OtpDeliveryResult deliver(OtpDeliveryRequest request);
 
-    record OtpDeliveryRequest(PhoneNumber destination, String code, UUID correlationId) {
+    record OtpDeliveryRequest(
+            PhoneNumber recipient,
+            String template,
+            String code,
+            int expiresMinutes,
+            UUID correlationId) {
         public OtpDeliveryRequest {
-            if (destination == null || code == null || correlationId == null) {
+            if (recipient == null || template == null || template.isBlank() || code == null
+                    || !code.matches("[0-9]{6}") || expiresMinutes <= 0 || correlationId == null) {
                 throw new IllegalArgumentException("OTP delivery request is incomplete");
             }
         }
     }
 
-    record OtpDeliveryResult(Status status, Channel channel) {
+    record OtpDeliveryResult(Status status, Channel channel, String providerMessageId) {
         public OtpDeliveryResult {
             if (status == null || channel == null) {
                 throw new IllegalArgumentException("delivery result is incomplete");
+            }
+            if (providerMessageId != null && providerMessageId.isBlank()) {
+                throw new IllegalArgumentException("provider message id cannot be blank");
             }
         }
     }

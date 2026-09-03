@@ -47,7 +47,8 @@ public final class ConfirmOtpFromWhatsApp {
         if (challenge.status() == OtpChallengeStatus.VERIFIED) {
             return OtpChallengeStatus.VERIFIED;
         }
-        if (challenge.status() != OtpChallengeStatus.PENDING) {
+        if (challenge.status() != OtpChallengeStatus.PENDING
+                && challenge.status() != OtpChallengeStatus.DELIVERED) {
             throw new IllegalArgumentException("OTP challenge is not pending");
         }
         if (challenge.isExpired(now)) {

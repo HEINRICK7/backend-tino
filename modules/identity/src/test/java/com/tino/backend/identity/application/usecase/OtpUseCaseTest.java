@@ -8,12 +8,14 @@ import com.tino.backend.identity.application.exception.OtpRateLimitedException;
 import com.tino.backend.identity.application.exception.OtpVerificationException;
 import com.tino.backend.identity.application.port.out.OtpChallengeRepository;
 import com.tino.backend.identity.application.port.out.OtpDeliveryPort;
+import com.tino.backend.identity.application.port.out.OtpDeliveryEventRepository;
 import com.tino.backend.identity.application.port.out.OtpGenerator;
 import com.tino.backend.identity.application.port.out.OtpSecretHasher;
 import com.tino.backend.identity.application.port.out.OtpVerificationEventRepository;
 import com.tino.backend.identity.application.model.OtpIdentityProof;
 import com.tino.backend.identity.domain.model.OtpChallenge;
 import com.tino.backend.identity.domain.model.OtpVerificationEvent;
+import com.tino.backend.identity.domain.model.OtpDeliveryEvent;
 import com.tino.backend.shared.kernel.UuidGenerator;
 import java.time.Clock;
 import java.time.Instant;
@@ -168,6 +170,24 @@ class OtpUseCaseTest {
                 .isEqualTo(com.tino.backend.identity.domain.model.OtpChallengeStatus.PENDING);
     }
 
+    @Test
+    void deliveryReceiptIsDurableAndIdempotentBeforeWhatsAppConfirmation() {
+        var repository = new InMemoryChallenges();
+        var deliveryEvents = new InMemoryDeliveryEvents();
+        var issued = request(repository, new CapturingDelivery(), new FixedGenerator(),
+                new HmacOtpSecretHasher("test-only-secret")).execute(PHONE, "127.0.0.1");
+        var update = new UpdateOtpDeliveryStatus(repository, deliveryEvents,
+                Clock.fixed(NOW, ZoneOffset.UTC));
+
+        assertThat(update.execute("receipt-1", "provider-message-1", "AUTH_DELIVERED", PHONE, NOW))
+                .isEqualTo(com.tino.backend.identity.domain.model.OtpChallengeStatus.DELIVERED);
+        assertThat(update.execute("receipt-1", "provider-message-1", "AUTH_DELIVERED", PHONE, NOW))
+                .isEqualTo(com.tino.backend.identity.domain.model.OtpChallengeStatus.DELIVERED);
+        assertThat(repository.findByIdForUpdate(issued.challengeId()).orElseThrow().status())
+                .isEqualTo(com.tino.backend.identity.domain.model.OtpChallengeStatus.DELIVERED);
+        assertThat(deliveryEvents.values).hasSize(1);
+    }
+
     private static RequestOtp request(
             InMemoryChallenges repository,
             CapturingDelivery delivery,
@@ -200,7 +220,7 @@ class OtpUseCaseTest {
         @Override
         public OtpDeliveryResult deliver(OtpDeliveryRequest request) {
             lastCode = request.code();
-            return new OtpDeliveryResult(Status.ACCEPTED, Channel.WHATSAPP);
+            return new OtpDeliveryResult(Status.ACCEPTED, Channel.WHATSAPP, "provider-message-1");
         }
     }
 
@@ -213,7 +233,8 @@ class OtpUseCaseTest {
         public Optional<OtpChallenge> findLatestPendingByPhoneHash(String phoneHash) {
             return values.values().stream()
                     .filter(c -> c.phoneHash().equals(phoneHash)
-                            && c.status() == com.tino.backend.identity.domain.model.OtpChallengeStatus.PENDING)
+                            && (c.status() == com.tino.backend.identity.domain.model.OtpChallengeStatus.PENDING
+                                    || c.status() == com.tino.backend.identity.domain.model.OtpChallengeStatus.DELIVERED))
                     .max(Comparator.comparing(OtpChallenge::createdAt));
         }
 
@@ -243,6 +264,13 @@ class OtpUseCaseTest {
                     .findFirst();
         }
 
+        @Override
+        public Optional<OtpChallenge> findByProviderMessageIdForUpdate(String providerMessageId) {
+            return values.values().stream()
+                    .filter(c -> providerMessageId.equals(c.providerMessageId()))
+                    .findFirst();
+        }
+
         @Override public void update(OtpChallenge challenge) { values.put(challenge.id(), challenge); }
 
         @Override
@@ -269,6 +297,20 @@ class OtpUseCaseTest {
 
         @Override
         public void insert(OtpVerificationEvent event) {
+            values.put(event.providerEventId(), event);
+        }
+    }
+
+    private static final class InMemoryDeliveryEvents implements OtpDeliveryEventRepository {
+        private final Map<String, OtpDeliveryEvent> values = new HashMap<>();
+
+        @Override
+        public Optional<OtpDeliveryEvent> findByProviderEventId(String providerEventId) {
+            return Optional.ofNullable(values.get(providerEventId));
+        }
+
+        @Override
+        public void insert(OtpDeliveryEvent event) {
             values.put(event.providerEventId(), event);
         }
     }

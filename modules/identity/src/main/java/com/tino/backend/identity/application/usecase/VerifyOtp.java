@@ -45,7 +45,7 @@ public class VerifyOtp {
             case LOCKED -> throw new OtpVerificationException(OtpVerificationException.Reason.LOCKED);
             case EXPIRED, DELIVERY_FAILED, CANCELLED -> throw new OtpVerificationException(
                     OtpVerificationException.Reason.EXPIRED);
-            case PENDING -> { }
+            case PENDING, DELIVERED -> { }
         }
         if (challenge.isExpired(now)) {
             challenges.update(challenge.expired());

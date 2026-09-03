@@ -21,6 +21,8 @@ public interface OtpChallengeRepository {
 
     Optional<OtpChallenge> findByTicketHashForUpdate(String ticketHash);
 
+    Optional<OtpChallenge> findByProviderMessageIdForUpdate(String providerMessageId);
+
     void update(OtpChallenge challenge);
 
     int deleteFinishedBefore(Instant before);

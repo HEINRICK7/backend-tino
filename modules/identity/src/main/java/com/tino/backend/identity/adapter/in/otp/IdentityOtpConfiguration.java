@@ -6,6 +6,7 @@ import com.tino.backend.identity.adapter.out.delivery.DisabledOtpDeliveryAdapter
 import com.tino.backend.identity.adapter.out.delivery.WaEvolutionOtpDeliveryAdapter;
 import com.tino.backend.identity.application.port.out.OtpChallengeRepository;
 import com.tino.backend.identity.application.port.out.OtpDeliveryPort;
+import com.tino.backend.identity.application.port.out.OtpDeliveryEventRepository;
 import com.tino.backend.identity.application.port.out.OtpGenerator;
 import com.tino.backend.identity.application.port.out.OtpSecretHasher;
 import com.tino.backend.identity.application.port.out.OtpVerificationEventRepository;
@@ -16,6 +17,7 @@ import com.tino.backend.identity.application.usecase.GetOtpChallengeStatus;
 import com.tino.backend.identity.application.usecase.IssueOtpVerificationTicket;
 import com.tino.backend.identity.application.usecase.RequestOtp;
 import com.tino.backend.identity.application.usecase.VerifyOtp;
+import com.tino.backend.identity.application.usecase.UpdateOtpDeliveryStatus;
 import com.tino.backend.shared.kernel.UuidGenerator;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -125,6 +127,12 @@ public class IdentityOtpConfiguration {
     ConfirmOtpFromWhatsApp confirmOtpFromWhatsApp(
             OtpChallengeRepository challenges, OtpVerificationEventRepository events, Clock clock) {
         return new ConfirmOtpFromWhatsApp(challenges, events, clock);
+    }
+
+    @Bean
+    UpdateOtpDeliveryStatus updateOtpDeliveryStatus(
+            OtpChallengeRepository challenges, OtpDeliveryEventRepository events, Clock clock) {
+        return new UpdateOtpDeliveryStatus(challenges, events, clock);
     }
 
     @Bean

@@ -18,6 +18,7 @@ public record OtpChallenge(
         int resendCount,
         int maxResends,
         Instant resendAvailableAt,
+        String providerMessageId,
         Instant createdAt,
         Instant verifiedAt,
         Instant consumedAt,
@@ -62,6 +63,7 @@ public record OtpChallenge(
                 0,
                 maxResends,
                 resendAvailableAt,
+                null,
                 createdAt,
                 null,
                 null,
@@ -77,6 +79,7 @@ public record OtpChallenge(
         return new OtpChallenge(
                 id, phone, phoneHash, requestOriginHash, codeVerifier, next, expiresAt,
                 attemptCount, maxAttempts, resendCount, maxResends, resendAvailableAt,
+                providerMessageId,
                 createdAt, verified, consumed, verificationTicketHash, verificationTicketExpiresAt);
     }
 
@@ -86,6 +89,7 @@ public record OtpChallenge(
         return new OtpChallenge(
                 id, phone, phoneHash, requestOriginHash, codeVerifier, nextStatus, expiresAt,
                 nextAttempts, maxAttempts, resendCount, maxResends, resendAvailableAt,
+                providerMessageId,
                 createdAt, verifiedAt, consumedAt, verificationTicketHash, verificationTicketExpiresAt);
     }
 
@@ -96,6 +100,7 @@ public record OtpChallenge(
         return new OtpChallenge(
                 id, phone, phoneHash, requestOriginHash, nextCodeVerifier, OtpChallengeStatus.PENDING,
                 nextExpiresAt, 0, maxAttempts, resendCount + 1, maxResends, nextResendAvailableAt,
+                null,
                 createdAt, null, null, null, null);
     }
 
@@ -110,6 +115,7 @@ public record OtpChallenge(
         return new OtpChallenge(
                 id, phone, phoneHash, requestOriginHash, codeVerifier, OtpChallengeStatus.VERIFIED,
                 expiresAt, attemptCount, maxAttempts, resendCount, maxResends, resendAvailableAt,
+                providerMessageId,
                 createdAt, verifiedAt, null, ticketHash, ticketExpiresAt);
     }
 
@@ -119,6 +125,7 @@ public record OtpChallenge(
         return new OtpChallenge(
                 id, phone, phoneHash, requestOriginHash, codeVerifier, OtpChallengeStatus.VERIFIED,
                 expiresAt, attemptCount, maxAttempts, resendCount, maxResends, resendAvailableAt,
+                providerMessageId,
                 createdAt, verifiedAt, null, null, null);
     }
 
@@ -131,6 +138,7 @@ public record OtpChallenge(
         return new OtpChallenge(
                 id, phone, phoneHash, requestOriginHash, codeVerifier, status,
                 expiresAt, attemptCount, maxAttempts, resendCount, maxResends, resendAvailableAt,
+                providerMessageId,
                 createdAt, verifiedAt, consumedAt, ticketHash, ticketExpiresAt);
     }
 
@@ -144,6 +152,22 @@ public record OtpChallenge(
 
     public OtpChallenge cancelled() {
         return withStatus(OtpChallengeStatus.CANCELLED, verifiedAt, consumedAt);
+    }
+
+    public OtpChallenge delivered() {
+        if (status != OtpChallengeStatus.PENDING) {
+            return this;
+        }
+        return withStatus(OtpChallengeStatus.DELIVERED, verifiedAt, consumedAt);
+    }
+
+    public OtpChallenge withProviderMessageId(String nextProviderMessageId) {
+        requireText(nextProviderMessageId, "providerMessageId");
+        return new OtpChallenge(
+                id, phone, phoneHash, requestOriginHash, codeVerifier, status, expiresAt,
+                attemptCount, maxAttempts, resendCount, maxResends, resendAvailableAt,
+                nextProviderMessageId, createdAt, verifiedAt, consumedAt,
+                verificationTicketHash, verificationTicketExpiresAt);
     }
 
     private static void requireText(String value, String name) {

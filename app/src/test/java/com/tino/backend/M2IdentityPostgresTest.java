@@ -59,7 +59,7 @@ class M2IdentityPostgresTest {
     void migratesFromZeroAndFlywayValidatePasses() {
         var flyway = migrate();
 
-        assertThat(flyway.info().applied()).hasSize(25);
+        assertThat(flyway.info().applied()).hasSize(26);
         flyway.validate();
         assertThat(tableColumns()).containsExactly(
                 "id", "external_subject", "status", "created_at", "updated_at");

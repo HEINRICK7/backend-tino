@@ -3,6 +3,7 @@ package com.tino.backend.identity.domain.model;
 /** Lifecycle of a pre-authentication OTP challenge. */
 public enum OtpChallengeStatus {
     PENDING,
+    DELIVERED,
     VERIFIED,
     EXPIRED,
     LOCKED,
@@ -14,6 +15,7 @@ public enum OtpChallengeStatus {
     public OtpLifecycleStatus canonical() {
         return switch (this) {
             case PENDING -> OtpLifecycleStatus.OTP_SENT;
+            case DELIVERED -> OtpLifecycleStatus.OTP_DELIVERED;
             case VERIFIED, CONSUMED -> OtpLifecycleStatus.OTP_VERIFIED;
             case EXPIRED -> OtpLifecycleStatus.OTP_EXPIRED;
             case LOCKED -> OtpLifecycleStatus.OTP_RATE_LIMITED;

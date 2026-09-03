@@ -6,14 +6,18 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 /**
  * Provider adapter for the private Go delivery service backed by wa-evolution.
  * It knows only the internal normalized HTTP contract, never OTP authority.
  */
 public final class WaEvolutionOtpDeliveryAdapter implements OtpDeliveryPort {
+    private static final Pattern PROVIDER_MESSAGE_ID =
+            Pattern.compile("\\\"provider_message_id\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
     private final HttpClient http;
     private final URI endpoint;
     private final String internalToken;
@@ -30,11 +34,13 @@ public final class WaEvolutionOtpDeliveryAdapter implements OtpDeliveryPort {
     @Override
     public OtpDeliveryResult deliver(OtpDeliveryRequest request) {
         if (internalToken.isBlank()) {
-            return new OtpDeliveryResult(Status.PERMANENT_FAILURE, Channel.WHATSAPP);
+            return new OtpDeliveryResult(Status.PERMANENT_FAILURE, Channel.WHATSAPP, null);
         }
-        var body = "{\"destination\":\"" + request.destination().e164()
-                + "\",\"message\":\"Seu codigo TINO e " + request.code()
-                + "\",\"correlation_id\":\"" + request.correlationId() + "\"}";
+        var body = "{\"recipient\":\"" + request.recipient().e164()
+                + "\",\"template\":\"" + request.template()
+                + "\",\"code\":\"" + request.code()
+                + "\",\"expires_minutes\":" + request.expiresMinutes()
+                + ",\"correlation_id\":\"" + request.correlationId() + "\"}";
         for (var attempt = 0; attempt < 2; attempt++) {
             var result = send(body);
             if (result.status() != Status.RETRYABLE_FAILURE || attempt == 1) {
@@ -42,7 +48,7 @@ public final class WaEvolutionOtpDeliveryAdapter implements OtpDeliveryPort {
             }
             pauseWithJitter();
         }
-        return new OtpDeliveryResult(Status.RETRYABLE_FAILURE, Channel.WHATSAPP);
+        return new OtpDeliveryResult(Status.RETRYABLE_FAILURE, Channel.WHATSAPP, null);
     }
 
     private OtpDeliveryResult send(String body) {
@@ -54,19 +60,23 @@ public final class WaEvolutionOtpDeliveryAdapter implements OtpDeliveryPort {
                     .header("X-Tino-Internal-Token", internalToken)
                     .POST(HttpRequest.BodyPublishers.ofString(body))
                     .build();
-            var response = http.send(request, HttpResponse.BodyHandlers.discarding());
+            var response = http.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             var status = response.statusCode();
             if (status >= 200 && status < 300) {
-                return new OtpDeliveryResult(Status.ACCEPTED, Channel.WHATSAPP);
+                var matcher = PROVIDER_MESSAGE_ID.matcher(response.body());
+                if (!matcher.find()) {
+                    return new OtpDeliveryResult(Status.RETRYABLE_FAILURE, Channel.WHATSAPP, null);
+                }
+                return new OtpDeliveryResult(Status.ACCEPTED, Channel.WHATSAPP, matcher.group(1));
             }
             return new OtpDeliveryResult(isRetryable(status)
                     ? Status.RETRYABLE_FAILURE
-                    : Status.PERMANENT_FAILURE, Channel.WHATSAPP);
+                    : Status.PERMANENT_FAILURE, Channel.WHATSAPP, null);
         } catch (IOException exception) {
-            return new OtpDeliveryResult(Status.RETRYABLE_FAILURE, Channel.WHATSAPP);
+            return new OtpDeliveryResult(Status.RETRYABLE_FAILURE, Channel.WHATSAPP, null);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            return new OtpDeliveryResult(Status.RETRYABLE_FAILURE, Channel.WHATSAPP);
+            return new OtpDeliveryResult(Status.RETRYABLE_FAILURE, Channel.WHATSAPP, null);
         }
     }
 

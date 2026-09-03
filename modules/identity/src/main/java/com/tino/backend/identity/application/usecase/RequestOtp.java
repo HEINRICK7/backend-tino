@@ -105,10 +105,19 @@ public class RequestOtp {
     }
 
     private OtpChallengeIssued deliver(OtpChallenge challenge, String code, Instant now) {
-        var result = delivery.deliver(new OtpDeliveryPort.OtpDeliveryRequest(challenge.phone(), code, challenge.id()));
-        if (result.status() != OtpDeliveryPort.Status.ACCEPTED) {
+        var result = delivery.deliver(new OtpDeliveryPort.OtpDeliveryRequest(
+                challenge.phone(), "AUTH_OTP", code, 5, challenge.id()));
+        if (result.status() != OtpDeliveryPort.Status.ACCEPTED
+                || result.providerMessageId() == null) {
             challenges.update(challenge.deliveryFailed());
-            throw new OtpDeliveryException(result.status() == OtpDeliveryPort.Status.RETRYABLE_FAILURE);
+            throw new OtpDeliveryException(result.status() == OtpDeliveryPort.Status.RETRYABLE_FAILURE
+                    || result.providerMessageId() == null);
+        }
+        var persisted = result.providerMessageId() == null
+                ? challenge
+                : challenge.withProviderMessageId(result.providerMessageId());
+        if (result.providerMessageId() != null) {
+            challenges.update(persisted);
         }
         return new OtpChallengeIssued(
                 challenge.id(),

@@ -14,7 +14,7 @@ import (
 func TestSendOTPRejectsMissingInternalToken(t *testing.T) {
 	cfg := &config{internalToken: "internal", client: http.DefaultClient}
 	request := httptest.NewRequest(http.MethodPost, "/internal/v1/messages/otp", strings.NewReader(
-		`{"destination":"+5586995922924","message":"Seu codigo TINO e 123456","correlation_id":"challenge-1"}`))
+		`{"recipient":"+5586995922924","template":"AUTH_OTP","code":"123456","expires_minutes":5,"correlation_id":"challenge-1"}`))
 	response := httptest.NewRecorder()
 
 	cfg.sendOTP(response, request)
@@ -33,7 +33,7 @@ func TestSendOTPForwardsNormalizedMessageToProvider(t *testing.T) {
 		receivedKey = request.Header.Get("apikey")
 		body, _ := io.ReadAll(request.Body)
 		receivedBody = string(body)
-		writer.WriteHeader(http.StatusOK)
+		_, _ = writer.Write([]byte(`{"key":{"id":"provider-message-1"}}`))
 	}))
 	defer provider.Close()
 
@@ -46,9 +46,9 @@ func TestSendOTPForwardsNormalizedMessageToProvider(t *testing.T) {
 		client:        provider.Client(),
 	}
 	request := httptest.NewRequest(http.MethodPost, "/internal/v1/messages/otp", strings.NewReader(
-		`{"destination":"+5586995922924","message":"Seu codigo TINO e 123456"}`))
+		`{"recipient":"+5586995922924","template":"AUTH_OTP","code":"123456","expires_minutes":5,"correlation_id":"challenge-1"}`))
 	request.Body = io.NopCloser(strings.NewReader(
-		`{"destination":"+5586995922924","message":"Seu codigo TINO e 123456","correlation_id":"challenge-1"}`))
+		`{"recipient":"+5586995922924","template":"AUTH_OTP","code":"123456","expires_minutes":5,"correlation_id":"challenge-1"}`))
 	request.Header.Set("X-Tino-Internal-Token", "internal")
 	response := httptest.NewRecorder()
 
@@ -64,7 +64,7 @@ func TestSendOTPForwardsNormalizedMessageToProvider(t *testing.T) {
 		t.Fatalf("provider key = %q", receivedKey)
 	}
 	if !strings.Contains(receivedBody, `"number":"5586995922924"`) ||
-		!strings.Contains(receivedBody, `"text":"Seu codigo TINO e 123456"`) {
+		!strings.Contains(receivedBody, `"text":"Seu código TINO é 123456. Expira em 5 min."`) {
 		t.Fatalf("provider body = %q", receivedBody)
 	}
 }
@@ -84,9 +84,9 @@ func TestSendOTPMapsProviderFailureToRetryableResponse(t *testing.T) {
 		client:        provider.Client(),
 	}
 	request := httptest.NewRequest(http.MethodPost, "/internal/v1/messages/otp", strings.NewReader(
-		`{"destination":"+5586995922924","message":"Seu codigo TINO e 123456"}`))
+		`{"recipient":"+5586995922924","template":"AUTH_OTP","code":"123456","expires_minutes":5,"correlation_id":"challenge-1"}`))
 	request.Body = io.NopCloser(strings.NewReader(
-		`{"destination":"+5586995922924","message":"Seu codigo TINO e 123456","correlation_id":"challenge-1"}`))
+		`{"recipient":"+5586995922924","template":"AUTH_OTP","code":"123456","expires_minutes":5,"correlation_id":"challenge-1"}`))
 	request.Header.Set("X-Tino-Internal-Token", "internal")
 	response := httptest.NewRecorder()
 
@@ -102,7 +102,7 @@ func TestSendOTPUsesCorrelationBoundButtonWhenConfigured(t *testing.T) {
 	provider := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		body, _ := io.ReadAll(request.Body)
 		receivedBody = string(body)
-		writer.WriteHeader(http.StatusCreated)
+		_, _ = writer.Write([]byte(`{"key":{"id":"provider-message-2"}}`))
 	}))
 	defer provider.Close()
 
@@ -115,7 +115,7 @@ func TestSendOTPUsesCorrelationBoundButtonWhenConfigured(t *testing.T) {
 		client:        provider.Client(),
 	}
 	request := httptest.NewRequest(http.MethodPost, "/internal/v1/messages/otp", strings.NewReader(
-		`{"destination":"+5586995922924","message":"Seu codigo TINO e 123456","correlation_id":"challenge-1"}`))
+		`{"recipient":"+5586995922924","template":"AUTH_OTP","code":"123456","expires_minutes":5,"correlation_id":"challenge-1"}`))
 	request.Header.Set("X-Tino-Internal-Token", "internal")
 	response := httptest.NewRecorder()
 
@@ -197,6 +197,38 @@ func TestWebhookNormalizesEvolutionButtonConfirmation(t *testing.T) {
 	for _, expected := range []string{`"correlation_id":"challenge-1"`, `"event_type":"AUTH_CONFIRMED"`, `"provider_event_id":"reply-1"`, `"sender_phone":"+5586995922924"`} {
 		if !strings.Contains(receivedBody, expected) {
 			t.Fatalf("normalized body = %q, missing %s", receivedBody, expected)
+		}
+	}
+}
+
+func TestWebhookNormalizesEvolutionDeliveryReceipt(t *testing.T) {
+	var receivedBody string
+	backend := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/internal/v1/identity/otp/delivery-events" {
+			t.Fatalf("callback path = %q", request.URL.Path)
+		}
+		body, _ := io.ReadAll(request.Body)
+		receivedBody = string(body)
+		writer.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	cfg := &config{backendURL: backend.URL, backendToken: "backend-token", webhookSecret: "webhook-secret", client: backend.Client()}
+	payload := `{"event":"MESSAGES_UPDATE","data":{"key":{"remoteJid":"5586995922924@s.whatsapp.net","fromMe":true,"id":"sent-1"},"update":{"status":4},"messageTimestamp":1725364800}}`
+	mac := hmac.New(sha256.New, []byte(cfg.webhookSecret))
+	_, _ = mac.Write([]byte(payload))
+	request := httptest.NewRequest(http.MethodPost, "/webhooks/whatsapp", strings.NewReader(payload))
+	request.Header.Set("X-Tino-Webhook-Signature", hex.EncodeToString(mac.Sum(nil)))
+	response := httptest.NewRecorder()
+
+	cfg.receiveWebhook(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	for _, expected := range []string{`"event_type":"AUTH_DELIVERED"`, `"provider_message_id":"sent-1"`, `"recipient_phone":"+5586995922924"`} {
+		if !strings.Contains(receivedBody, expected) {
+			t.Fatalf("normalized delivery body = %q, missing %s", receivedBody, expected)
 		}
 	}
 }
