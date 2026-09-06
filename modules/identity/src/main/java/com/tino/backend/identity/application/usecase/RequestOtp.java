@@ -6,8 +6,10 @@ import com.tino.backend.identity.application.model.OtpChallengeIssued;
 import com.tino.backend.identity.application.port.out.OtpChallengeRepository;
 import com.tino.backend.identity.application.port.out.OtpDeliveryPort;
 import com.tino.backend.identity.application.port.out.OtpGenerator;
+import com.tino.backend.identity.application.port.out.OtpPhoneAuthorization;
 import com.tino.backend.identity.application.port.out.OtpSecretHasher;
 import com.tino.backend.identity.domain.model.OtpChallenge;
+import com.tino.backend.identity.domain.model.OtpChallengePurpose;
 import com.tino.backend.identity.domain.model.OtpLifecycleStatus;
 import com.tino.backend.identity.domain.model.PhoneNumber;
 import com.tino.backend.shared.kernel.UuidGenerator;
@@ -15,6 +17,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.UUID;
 
 /** Creates or safely resends a short-lived OTP without disclosing the code. */
 public class RequestOtp {
@@ -33,6 +36,7 @@ public class RequestOtp {
     private final OtpSecretHasher hasher;
     private final UuidGenerator ids;
     private final Clock clock;
+    private final OtpPhoneAuthorization phoneAuthorization;
 
     public RequestOtp(
             OtpChallengeRepository challenges,
@@ -41,18 +45,56 @@ public class RequestOtp {
             OtpSecretHasher hasher,
             UuidGenerator ids,
             Clock clock) {
+        this(challenges, delivery, generator, hasher, ids, clock, new OtpPhoneAuthorization() {
+            @Override
+            public boolean isAuthorized(String phoneHash, UUID businessId) {
+                return true;
+            }
+
+            @Override
+            public void bind(String phoneHash, String externalSubject) {
+                // Legacy unit-test constructor does not exercise identity binding.
+            }
+        });
+    }
+
+    public RequestOtp(
+            OtpChallengeRepository challenges,
+            OtpDeliveryPort delivery,
+            OtpGenerator generator,
+            OtpSecretHasher hasher,
+            UuidGenerator ids,
+            Clock clock,
+            OtpPhoneAuthorization phoneAuthorization) {
         this.challenges = Objects.requireNonNull(challenges, "challenges");
         this.delivery = Objects.requireNonNull(delivery, "delivery");
         this.generator = Objects.requireNonNull(generator, "generator");
         this.hasher = Objects.requireNonNull(hasher, "hasher");
         this.ids = Objects.requireNonNull(ids, "ids");
         this.clock = Objects.requireNonNull(clock, "clock");
+        this.phoneAuthorization = Objects.requireNonNull(phoneAuthorization, "phoneAuthorization");
     }
 
     public OtpChallengeIssued execute(String phoneInput, String requestOrigin) {
+        return execute(phoneInput, requestOrigin, OtpChallengePurpose.ACCOUNT_SIGN_UP, null);
+    }
+
+    public OtpChallengeIssued execute(
+            String phoneInput,
+            String requestOrigin,
+            OtpChallengePurpose purpose,
+            UUID businessId) {
         var phone = PhoneNumber.normalize(phoneInput);
+        if (purpose == null || (purpose == OtpChallengePurpose.EXISTING_BUSINESS_LOGIN && businessId == null)
+                || (purpose == OtpChallengePurpose.ACCOUNT_SIGN_UP && businessId != null)) {
+            throw new com.tino.backend.identity.application.exception.OtpInvalidRequestException();
+        }
         var now = Instant.now(clock);
         var phoneHash = hasher.hashPhone(phone.e164());
+        if (purpose == OtpChallengePurpose.EXISTING_BUSINESS_LOGIN
+                && !phoneAuthorization.isAuthorized(phoneHash, businessId)) {
+            throw new com.tino.backend.identity.application.exception.OtpBusinessPhoneNotAuthorizedException();
+        }
         var originHash = requestOrigin == null || requestOrigin.isBlank()
                 ? null
                 : hasher.hashOrigin(requestOrigin);

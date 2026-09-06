@@ -94,6 +94,14 @@ KEYCLOAK_DB_PASSWORD=generate-a-long-random-value
 TINO_KEYCLOAK_ADMIN_USERNAME=admin
 TINO_KEYCLOAK_ADMIN_PASSWORD=generate-a-long-random-value
 TINO_FISCAL_MODE=fixture
+TINO_OTP_ENABLED=true
+TINO_OTP_HASH_SECRET=generate-a-long-random-value
+TINO_OTP_INTERNAL_TOKEN=generate-a-long-random-value
+TINO_OTP_DELIVERY_INTERNAL_TOKEN=generate-a-long-random-value
+WA_EVOLUTION_BASE_URL=http://evolution-api:8080
+WA_EVOLUTION_API_KEY=secret-from-evolution
+WA_EVOLUTION_INSTANCE=tino
+WA_EVOLUTION_WEBHOOK_SECRET=generate-a-long-random-value
 OTEL_SDK_DISABLED=true
 ```
 

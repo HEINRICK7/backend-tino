@@ -8,6 +8,7 @@ import com.tino.backend.identity.application.usecase.CancelOtp;
 import com.tino.backend.identity.application.usecase.IssueOtpVerificationTicket;
 import com.tino.backend.identity.application.usecase.RequestOtp;
 import com.tino.backend.identity.application.usecase.VerifyOtp;
+import com.tino.backend.identity.domain.model.OtpChallengePurpose;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -50,7 +51,7 @@ public class OtpController {
         }
         var origin = httpRequest == null ? null : httpRequest.getRemoteAddr();
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(requestOtp.execute(request.phone(), origin));
+                .body(requestOtp.execute(request.phone(), origin, parsePurpose(request.purpose()), request.businessId()));
     }
 
     @PostMapping("/challenges/{challengeId}/verify")
@@ -82,7 +83,18 @@ public class OtpController {
         return cancelOtp.execute(challengeId);
     }
 
-    public record Request(String phone) {}
+    private static OtpChallengePurpose parsePurpose(String value) {
+        if (value == null || value.isBlank()) {
+            throw new com.tino.backend.identity.application.exception.OtpInvalidRequestException();
+        }
+        try {
+            return OtpChallengePurpose.valueOf(value.trim().toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException exception) {
+            throw new com.tino.backend.identity.application.exception.OtpInvalidRequestException();
+        }
+    }
+
+    public record Request(String phone, String purpose, UUID businessId) {}
 
     public record VerifyRequest(String code) {}
 }

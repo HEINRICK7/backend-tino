@@ -87,8 +87,9 @@ public class IdentityOtpConfiguration {
             OtpGenerator generator,
             OtpSecretHasher hasher,
             UuidGenerator ids,
-            Clock clock) {
-        return new RequestOtp(challenges, delivery, generator, hasher, ids, clock);
+            Clock clock,
+            com.tino.backend.identity.application.port.out.OtpPhoneAuthorization phoneAuthorization) {
+        return new RequestOtp(challenges, delivery, generator, hasher, ids, clock, phoneAuthorization);
     }
 
     @Bean
