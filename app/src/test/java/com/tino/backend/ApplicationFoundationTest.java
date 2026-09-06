@@ -46,4 +46,30 @@ class ApplicationFoundationTest {
         assertThat(response.body()).contains("\"status\":\"UP\"");
         assertThat(response.headers().firstValue("X-Correlation-Id")).isPresent();
     }
+
+    @Test
+    void preAuthenticationOtpEndpointIsPublicAndReachesItsContract() throws Exception {
+        var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/auth/otp/challenges"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString("{}"))
+                .build();
+        var response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+        assertThat(response.statusCode()).isEqualTo(400);
+        assertThat(response.body()).contains("INVALID_OTP_REQUEST");
+    }
+
+    @Test
+    void existingBusinessOtpIsRejectedBeforeDeliveryWhenPhoneIsNotBound() throws Exception {
+        var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/auth/otp/challenges"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(
+                        "{\"phone\":\"86995389481\",\"purpose\":\"EXISTING_BUSINESS_LOGIN\","
+                                + "\"business_id\":\"00000000-0000-7000-8000-000000000001\"}"))
+                .build();
+        var response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+        assertThat(response.statusCode()).isEqualTo(403);
+        assertThat(response.body()).contains("BUSINESS_PHONE_NOT_AUTHORIZED");
+    }
 }

@@ -5,11 +5,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.tino.backend.identity.adapter.out.crypto.HmacOtpSecretHasher;
 import com.tino.backend.identity.application.exception.OtpRateLimitedException;
+import com.tino.backend.identity.application.exception.OtpBusinessPhoneNotAuthorizedException;
 import com.tino.backend.identity.application.exception.OtpVerificationException;
 import com.tino.backend.identity.application.port.out.OtpChallengeRepository;
 import com.tino.backend.identity.application.port.out.OtpDeliveryPort;
 import com.tino.backend.identity.application.port.out.OtpDeliveryEventRepository;
 import com.tino.backend.identity.application.port.out.OtpGenerator;
+import com.tino.backend.identity.application.port.out.OtpPhoneAuthorization;
 import com.tino.backend.identity.application.port.out.OtpSecretHasher;
 import com.tino.backend.identity.application.port.out.OtpVerificationEventRepository;
 import com.tino.backend.identity.application.model.OtpIdentityProof;
@@ -103,6 +105,31 @@ class OtpUseCaseTest {
 
         assertThatThrownBy(() -> request.execute(PHONE, "127.0.0.1"))
                 .isInstanceOf(OtpRateLimitedException.class);
+    }
+
+    @Test
+    void existingBusinessLoginIsRejectedBeforeDeliveryWhenPhoneIsNotAuthorized() {
+        var repository = new InMemoryChallenges();
+        var delivery = new CapturingDelivery();
+        var request = new RequestOtp(
+                repository,
+                delivery,
+                new FixedGenerator(),
+                new HmacOtpSecretHasher("test-only-secret"),
+                new FixedUuidGenerator(),
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                new OtpPhoneAuthorization() {
+                    @Override public boolean isAuthorized(String phoneHash, UUID businessId) { return false; }
+                    @Override public void bind(String phoneHash, String externalSubject) { }
+                });
+
+        assertThatThrownBy(() -> request.execute(
+                        PHONE, "127.0.0.1",
+                        com.tino.backend.identity.domain.model.OtpChallengePurpose.EXISTING_BUSINESS_LOGIN,
+                        UUID.randomUUID()))
+                .isInstanceOf(OtpBusinessPhoneNotAuthorizedException.class);
+        assertThat(delivery.lastCode).isNull();
+        assertThat(repository.values).isEmpty();
     }
 
     @Test

@@ -214,6 +214,23 @@ jobs:
           : "${TINO_AUTH_HOST:?missing TINO_AUTH_HOST}"
           : "${TINO_VPS_IPV4:?missing TINO_VPS_IPV4}"
           : "${TINO_LETSENCRYPT_EMAIL:?missing TINO_LETSENCRYPT_EMAIL}"
+          test "$TINO_OTP_ENABLED" = "true" || {
+            echo 'Production deployment requires TINO_OTP_ENABLED=true; refusing to publish a login-disabled backend' >&2
+            exit 27
+          }
+          for required_otp_secret in TINO_OTP_HASH_SECRET TINO_OTP_INTERNAL_TOKEN TINO_OTP_DELIVERY_INTERNAL_TOKEN WA_EVOLUTION_BASE_URL WA_EVOLUTION_API_KEY WA_EVOLUTION_INSTANCE; do
+            value="$(dotenv_value "$required_otp_secret")"
+            test -n "$value" || {
+              echo "Production deployment is missing $required_otp_secret; refusing to publish an unusable OTP stack" >&2
+              exit 28
+            }
+          done
+          webhook_secret="$(dotenv_value WA_EVOLUTION_WEBHOOK_SECRET)"
+          webhook_token="$(dotenv_value WA_EVOLUTION_WEBHOOK_TOKEN)"
+          test -n "$webhook_secret" || test -n "$webhook_token" || {
+            echo 'Production deployment requires WA_EVOLUTION_WEBHOOK_SECRET or WA_EVOLUTION_WEBHOOK_TOKEN' >&2
+            exit 29
+          }
           for host in "$TINO_API_HOST" "$TINO_AUTH_HOST"; do
             resolved="$(getent ahostsv4 "$host" | awk 'NR == 1 {print $1}')"
             test "$resolved" = "$TINO_VPS_IPV4" || {

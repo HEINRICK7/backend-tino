@@ -45,8 +45,43 @@ public final class TinoOtpAuthenticator implements Authenticator {
             context.failure(AuthenticationFlowError.INVALID_USER);
             return;
         }
+        if (!bindPhone(user.getId(), phone)) {
+            context.failure(AuthenticationFlowError.GENERIC_AUTHENTICATION_ERROR);
+            return;
+        }
         context.setUser(user);
         context.success();
+    }
+
+    private boolean bindPhone(String externalSubject, String phone) {
+        var baseUrl = env("TINO_OTP_BACKEND_URL", "http://app:8080");
+        var internalToken = System.getenv("TINO_OTP_INTERNAL_TOKEN");
+        if (internalToken == null || internalToken.isBlank()) {
+            return false;
+        }
+        var endpoint = baseUrl.replaceAll("/$", "")
+                + "/internal/v1/identity/otp/phones/bind";
+        try {
+            var payload = "{\"phone\":\"" + jsonEscape(phone)
+                    + "\",\"external_subject\":\"" + jsonEscape(externalSubject) + "\"}";
+            var request = HttpRequest.newBuilder(URI.create(endpoint))
+                    .timeout(Duration.ofSeconds(3))
+                    .header("X-Tino-Internal-Token", internalToken)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(payload))
+                    .build();
+            var response = http.send(request, HttpResponse.BodyHandlers.discarding());
+            return response.statusCode() == 204;
+        } catch (IOException exception) {
+            return false;
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+
+    private static String jsonEscape(String value) {
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     @Override
