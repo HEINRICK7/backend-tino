@@ -47,7 +47,7 @@ public class RequestOtp {
             Clock clock) {
         this(challenges, delivery, generator, hasher, ids, clock, new OtpPhoneAuthorization() {
             @Override
-            public boolean isAuthorized(String phoneHash, UUID businessId) {
+            public boolean isAuthorized(String phoneE164, String phoneHash, UUID businessId) {
                 return true;
             }
 
@@ -92,7 +92,7 @@ public class RequestOtp {
         var now = Instant.now(clock);
         var phoneHash = hasher.hashPhone(phone.e164());
         if (purpose == OtpChallengePurpose.EXISTING_BUSINESS_LOGIN
-                && !phoneAuthorization.isAuthorized(phoneHash, businessId)) {
+                && !phoneAuthorization.isAuthorized(phone.e164(), phoneHash, businessId)) {
             throw new com.tino.backend.identity.application.exception.OtpBusinessPhoneNotAuthorizedException();
         }
         var originHash = requestOrigin == null || requestOrigin.isBlank()

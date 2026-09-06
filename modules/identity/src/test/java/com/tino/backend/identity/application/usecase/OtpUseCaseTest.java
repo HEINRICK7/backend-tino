@@ -119,7 +119,7 @@ class OtpUseCaseTest {
                 new FixedUuidGenerator(),
                 Clock.fixed(NOW, ZoneOffset.UTC),
                 new OtpPhoneAuthorization() {
-                    @Override public boolean isAuthorized(String phoneHash, UUID businessId) { return false; }
+                    @Override public boolean isAuthorized(String phoneE164, String phoneHash, UUID businessId) { return false; }
                     @Override public void bind(String phoneHash, String externalSubject) { }
                 });
 
