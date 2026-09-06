@@ -30,6 +30,7 @@ tino:
       enabled: ${TINO_OTP_ENABLED:false}
       hash-secret: ${TINO_OTP_HASH_SECRET:}
       internal-token: ${TINO_OTP_INTERNAL_TOKEN:}
+      keycloak-url: ${TINO_OTP_KEYCLOAK_URL:http://keycloak:8080}
       cleanup-interval-ms: ${TINO_OTP_CLEANUP_INTERVAL_MS:3600000}
       delivery:
         provider: ${TINO_OTP_DELIVERY_PROVIDER:WA_EVOLUTION}

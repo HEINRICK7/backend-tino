@@ -2,6 +2,7 @@ package com.tino.backend.identity.adapter.in.otp;
 
 import com.tino.backend.identity.application.exception.OtpDeliveryException;
 import com.tino.backend.identity.application.exception.OtpBusinessPhoneNotAuthorizedException;
+import com.tino.backend.identity.application.exception.OtpAuthorizationUnavailableException;
 import com.tino.backend.identity.application.exception.OtpInvalidRequestException;
 import com.tino.backend.identity.application.exception.OtpRateLimitedException;
 import com.tino.backend.identity.application.exception.OtpVerificationException;
@@ -36,6 +37,11 @@ public final class OtpApiExceptionHandler {
     @ExceptionHandler(OtpBusinessPhoneNotAuthorizedException.class)
     ResponseEntity<ErrorResponse> businessPhoneNotAuthorized(OtpBusinessPhoneNotAuthorizedException exception) {
         return response(HttpStatus.FORBIDDEN, "BUSINESS_PHONE_NOT_AUTHORIZED", "phone is not authorized for this business");
+    }
+
+    @ExceptionHandler(OtpAuthorizationUnavailableException.class)
+    ResponseEntity<ErrorResponse> authorizationUnavailable(OtpAuthorizationUnavailableException exception) {
+        return response(HttpStatus.SERVICE_UNAVAILABLE, "OTP_AUTHORIZATION_UNAVAILABLE", "OTP authorization unavailable");
     }
 
     @ExceptionHandler(OtpVerificationException.class)
