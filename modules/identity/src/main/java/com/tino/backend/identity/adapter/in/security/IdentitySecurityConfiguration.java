@@ -3,8 +3,12 @@ package com.tino.backend.identity.adapter.in.security;
 import com.tino.backend.identity.application.port.in.AuthenticatedPrincipal;
 import com.tino.backend.identity.application.port.in.AuthenticatedUserResolver;
 import com.tino.backend.identity.application.port.in.AuthenticatedUserSnapshot;
+import com.tino.backend.identity.application.port.in.PhoneChangeOtpGateway;
+import com.tino.backend.identity.application.port.in.PhoneNumberNormalizer;
 import com.tino.backend.identity.application.port.out.UserRepository;
 import com.tino.backend.identity.application.usecase.ResolveAuthenticatedUser;
+import com.tino.backend.identity.application.usecase.ConsumeOtpVerificationTicket;
+import com.tino.backend.identity.application.usecase.RequestOtp;
 import com.tino.backend.identity.domain.model.UserStatus;
 import com.tino.backend.shared.kernel.UuidGenerator;
 import com.tino.backend.shared.kernel.UuidV7Generator;
@@ -40,6 +44,37 @@ public class IdentitySecurityConfiguration {
             var user = users.execute(principal);
             return new AuthenticatedUserSnapshot(
                     user.id().value(), user.status() == UserStatus.ACTIVE);
+        };
+    }
+
+    @Bean
+    PhoneChangeOtpGateway phoneChangeOtpGateway(
+            RequestOtp requestOtp,
+            ConsumeOtpVerificationTicket consumeTicket,
+            PhoneNumberNormalizer phoneNumbers) {
+        return new PhoneChangeOtpGateway() {
+            @Override
+            public PhoneChangeChallenge request(String phoneE164, String requestOrigin, java.util.UUID businessId) {
+                var issued = requestOtp.executePhoneChange(phoneE164, requestOrigin, businessId);
+                return new PhoneChangeChallenge(
+                        issued.challengeId(), issued.expiresInSeconds(), issued.resendAvailableInSeconds(),
+                        issued.deliveryChannel().name());
+            }
+
+            @Override
+            public void consume(
+                    java.util.UUID challengeId,
+                    String verificationTicket,
+                    String expectedPhoneE164,
+                    Runnable beforeConsume) {
+                consumeTicket.execute(verificationTicket, "tino-android", proof -> {
+                    if (!proof.challengeId().equals(challengeId)
+                            || !proof.phone().e164().equals(phoneNumbers.normalize(expectedPhoneE164))) {
+                        throw new IllegalArgumentException("verification ticket does not match phone change");
+                    }
+                    beforeConsume.run();
+                });
+            }
         };
     }
 

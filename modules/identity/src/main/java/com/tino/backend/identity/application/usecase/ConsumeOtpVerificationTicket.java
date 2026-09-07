@@ -8,6 +8,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.function.Consumer;
 
 /** Consumes the short-lived proof reserved for the identity-provider bridge. */
 public class ConsumeOtpVerificationTicket {
@@ -34,10 +35,21 @@ public class ConsumeOtpVerificationTicket {
     }
 
     public OtpIdentityProof execute(String ticket) {
-        return execute(ticket, allowedClientId);
+        return execute(ticket, allowedClientId, proof -> { });
     }
 
     public OtpIdentityProof execute(String ticket, String clientId) {
+        return execute(ticket, clientId, proof -> { });
+    }
+
+    /**
+     * Validates a ticket and lets an owning use case perform its idempotent
+     * domain update before the single-use ticket is consumed. If the callback
+     * fails, the ticket remains available for a safe retry.
+     */
+    public OtpIdentityProof execute(
+            String ticket, String clientId, Consumer<OtpIdentityProof> beforeConsume) {
+        Objects.requireNonNull(beforeConsume, "beforeConsume");
         if (ticket == null || ticket.isBlank()) {
             throw new OtpVerificationException(OtpVerificationException.Reason.INVALID);
         }
@@ -55,10 +67,12 @@ public class ConsumeOtpVerificationTicket {
                             ? OtpVerificationException.Reason.ALREADY_USED
                             : OtpVerificationException.Reason.EXPIRED);
         }
-        challenges.update(challenge.consumed(now));
-        return new OtpIdentityProof(
+        var proof = new OtpIdentityProof(
                 challenge.id(),
                 challenge.phone(),
                 Math.max(1, Duration.between(now, challenge.verificationTicketExpiresAt()).toSeconds()));
+        beforeConsume.accept(proof);
+        challenges.update(challenge.consumed(now));
+        return proof;
     }
 }

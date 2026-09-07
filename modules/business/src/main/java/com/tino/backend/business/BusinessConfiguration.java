@@ -15,6 +15,12 @@ import com.tino.backend.business.application.usecase.CreateBusiness;
 import com.tino.backend.business.application.usecase.ExecuteAuthorizedBusinessOperation;
 import com.tino.backend.business.application.usecase.ListUserBusinesses;
 import com.tino.backend.business.application.usecase.ResolveBusinessAccess;
+import com.tino.backend.business.application.usecase.CompletePhoneChange;
+import com.tino.backend.business.application.usecase.RequestPhoneChange;
+import com.tino.backend.business.application.port.out.PhoneChangeRepository;
+import com.tino.backend.identity.application.port.in.PhoneIdentityManagement;
+import com.tino.backend.identity.application.port.in.PhoneNumberNormalizer;
+import com.tino.backend.identity.application.port.in.PhoneChangeOtpGateway;
 import com.tino.backend.business.domain.model.UserId;
 import com.tino.backend.shared.kernel.TenantContextExecutor;
 import com.tino.backend.shared.kernel.UuidGenerator;
@@ -104,6 +110,25 @@ public class BusinessConfiguration {
     @Bean
     BusinessAccess businessAccess(ResolveBusinessAccess access) {
         return (userId, businessId) -> access.execute(new UserId(userId), businessId).businessId();
+    }
+
+    @Bean
+    RequestPhoneChange requestPhoneChange(
+            BusinessAuthorization authorization,
+            PhoneChangeOtpGateway otp,
+            PhoneChangeRepository requests,
+            PhoneNumberNormalizer phoneNumbers) {
+        return new RequestPhoneChange(authorization, otp, requests, phoneNumbers);
+    }
+
+    @Bean
+    CompletePhoneChange completePhoneChange(
+            BusinessAuthorization authorization,
+            PhoneChangeRepository requests,
+            PhoneChangeOtpGateway otp,
+            PhoneIdentityManagement identities,
+            Clock clock) {
+        return new CompletePhoneChange(authorization, requests, otp, identities, clock);
     }
 
     private static AccessibleBusinessView toPublicView(

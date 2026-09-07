@@ -79,6 +79,12 @@ public class RequestOtp {
         return execute(phoneInput, requestOrigin, OtpChallengePurpose.ACCOUNT_SIGN_UP, null);
     }
 
+    /** Authenticated Business flows use this entrypoint so PHONE_CHANGE is not exposed by pre-auth HTTP. */
+    public OtpChallengeIssued executePhoneChange(
+            String phoneInput, String requestOrigin, UUID businessId) {
+        return execute(phoneInput, requestOrigin, OtpChallengePurpose.PHONE_CHANGE, businessId);
+    }
+
     public OtpChallengeIssued execute(
             String phoneInput,
             String requestOrigin,
