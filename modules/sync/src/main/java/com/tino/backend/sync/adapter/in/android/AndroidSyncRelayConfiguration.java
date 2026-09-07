@@ -15,6 +15,7 @@ public class AndroidSyncRelayConfiguration {
             "product.price.reversed",
             "stock.received",
             "sale.created",
+            "sale.reversed",
             "direct.receipt.created",
             "customer.created",
             "customer.updated",
@@ -42,6 +43,7 @@ public class AndroidSyncRelayConfiguration {
     @Bean SyncEventHandler productPriceReversedRelay() { return relay("product.price.reversed"); }
     @Bean SyncEventHandler stockReceivedRelay() { return relay("stock.received"); }
     @Bean SyncEventHandler saleCreatedRelay() { return relay("sale.created"); }
+    @Bean SyncEventHandler saleReversedRelay() { return relay("sale.reversed"); }
     @Bean SyncEventHandler directReceiptCreatedRelay() { return relay("direct.receipt.created"); }
     @Bean SyncEventHandler customerCreatedRelay() { return relay("customer.created"); }
     @Bean SyncEventHandler customerUpdatedRelay() { return relay("customer.updated"); }

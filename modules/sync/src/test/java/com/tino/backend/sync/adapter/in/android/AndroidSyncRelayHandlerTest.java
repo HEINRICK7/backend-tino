@@ -24,7 +24,7 @@ class AndroidSyncRelayHandlerTest {
     @Test
     void eachApprovedTypeUsesSchemaVersionOne() {
         assertThat(AndroidSyncRelayConfiguration.SUPPORTED_EVENT_TYPES)
-                .hasSize(26)
+                .hasSize(27)
                 .doesNotHaveDuplicates();
     }
 
