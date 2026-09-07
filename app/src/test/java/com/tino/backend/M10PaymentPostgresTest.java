@@ -69,7 +69,7 @@ class M10PaymentPostgresTest {
                     + "public.credit_idempotency_keys, public.credit_ledger_entries, public.credit_accounts, "
                     + "public.customer_idempotency_keys, public.customers, public.sync_event_rejections, "
                     + "public.sync_outbox, public.sync_changes, public.sync_event_claims, public.device_installations, "
-                    + "public.business_memberships, public.businesses, public.users");
+                    + "public.phone_change_requests, public.business_memberships, public.businesses, public.users");
         }
         seedBusiness(BUSINESS_A, USER_ID, "m10-a");
         seedCustomer(BUSINESS_A, CUSTOMER_A, "M10 customer A");

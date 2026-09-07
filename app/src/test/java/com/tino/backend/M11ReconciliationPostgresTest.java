@@ -64,7 +64,7 @@ class M11ReconciliationPostgresTest {
                     + "public.payment_provider_events, public.payment_outbox, public.payment_idempotency_keys, public.payments, "
                     + "public.credit_audit_records, public.credit_idempotency_keys, public.credit_ledger_entries, public.credit_accounts, "
                     + "public.customer_idempotency_keys, public.customers, public.sync_event_rejections, public.sync_outbox, "
-                    + "public.sync_changes, public.sync_event_claims, public.device_installations, public.business_memberships, "
+                    + "public.sync_changes, public.sync_event_claims, public.device_installations, public.phone_change_requests, public.business_memberships, "
                     + "public.businesses, public.users");
             statement.execute("INSERT INTO public.users (id, external_subject, status, created_at, updated_at) VALUES "
                     + "('%s', 'm11-user', 'ACTIVE', '%s', '%s')".formatted(USER_ID, NOW, NOW));

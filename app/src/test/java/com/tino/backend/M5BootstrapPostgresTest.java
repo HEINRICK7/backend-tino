@@ -42,7 +42,7 @@ class M5BootstrapPostgresTest {
                     + "public.credit_ledger_entries, public.credit_accounts, public.customer_idempotency_keys, public.customers, "
                     + "public.sync_event_rejections, public.sync_outbox, "
                     + "public.sync_changes, public.sync_event_claims, public.device_installations, "
-                    + "public.business_memberships, public.businesses, public.users");
+                    + "public.phone_change_requests, public.business_memberships, public.businesses, public.users");
         }
     }
 
@@ -111,8 +111,8 @@ class M5BootstrapPostgresTest {
         var info = migrate().info();
 
         assertThat(info.applied()).extracting(migration -> migration.getVersion().toString())
-                .containsExactly("0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26");
-        assertThat(info.current().getVersion().toString()).isEqualTo("26");
+                .containsExactly("0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27");
+        assertThat(info.current().getVersion().toString()).isEqualTo("27");
     }
 
     @Test

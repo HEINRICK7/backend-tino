@@ -66,7 +66,7 @@ class M10PaymentHttpApiTest {
                     + "public.credit_idempotency_keys, public.credit_ledger_entries, public.credit_accounts, "
                     + "public.customer_idempotency_keys, public.customers, public.sync_event_rejections, "
                     + "public.sync_outbox, public.sync_changes, public.sync_event_claims, public.device_installations, "
-                    + "public.business_memberships, public.businesses, public.users");
+                    + "public.phone_change_requests, public.business_memberships, public.businesses, public.users");
         }
         try (var connection = DriverManager.getConnection(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
                 var statement = connection.createStatement()) {
