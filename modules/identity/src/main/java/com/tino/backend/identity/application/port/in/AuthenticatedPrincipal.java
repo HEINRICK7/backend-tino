@@ -16,4 +16,9 @@ public record AuthenticatedPrincipal(ExternalSubject externalSubject) {
         }
         return new AuthenticatedPrincipal(new ExternalSubject(value));
     }
+
+    /** Exposes only the opaque subject value to another bounded-context adapter. */
+    public String value() {
+        return externalSubject.value();
+    }
 }

@@ -124,7 +124,7 @@ class M4DevicePostgresTest {
                     + "public.credit_ledger_entries, public.credit_accounts, public.customer_idempotency_keys, public.customers, "
                     + "public.sync_event_rejections, public.sync_outbox, "
                     + "public.sync_changes, public.sync_event_claims, public.device_installations, "
-                    + "public.business_memberships, public.businesses, public.users");
+                    + "public.phone_change_requests, public.business_memberships, public.businesses, public.users");
         }
     }
 
@@ -463,7 +463,7 @@ class M4DevicePostgresTest {
             fresh.start();
             var result = migrate(fresh).migrate();
             assertThat(result.success).isTrue();
-            assertThat(result.migrationsExecuted).isEqualTo(27);
+            assertThat(result.migrationsExecuted).isEqualTo(28);
         }
     }
 

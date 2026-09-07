@@ -1,7 +1,13 @@
 package com.tino.backend.identity.adapter.out.persistence;
 
+import com.tino.backend.identity.application.exception.PhoneIdentityConflictException;
+import com.tino.backend.identity.application.exception.PhoneIdentityOperationException;
+import com.tino.backend.identity.application.port.in.PhoneIdentityManagement;
+import com.tino.backend.identity.application.port.in.PhoneNumberNormalizer;
 import com.tino.backend.identity.application.port.out.OtpPhoneAuthorization;
+import com.tino.backend.identity.application.port.out.OtpSecretHasher;
 import com.tino.backend.identity.application.exception.OtpAuthorizationUnavailableException;
+import com.tino.backend.identity.domain.model.PhoneNumber;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -23,8 +29,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 /** PostgreSQL adapter for the phone identity used by the pre-authentication policy. */
 @Repository
-public class JooqOtpPhoneAuthorization implements OtpPhoneAuthorization {
+public class JooqOtpPhoneAuthorization implements OtpPhoneAuthorization, PhoneIdentityManagement, PhoneNumberNormalizer {
     private static final Table<?> IDENTITIES = DSL.table(DSL.name("public", "identity_phone_bindings"));
+    private static final Table<?> USERS = DSL.table(DSL.name("public", "users"));
+    private static final Field<UUID> USER_ID = DSL.field(DSL.name("id"), UUID.class);
     private static final Field<String> PHONE_HASH = DSL.field(DSL.name("phone_hash"), String.class);
     private static final Field<String> EXTERNAL_SUBJECT = DSL.field(DSL.name("external_subject"), String.class);
     private static final Field<OffsetDateTime> CREATED_AT = DSL.field(DSL.name("created_at"), OffsetDateTime.class);
@@ -35,16 +43,19 @@ public class JooqOtpPhoneAuthorization implements OtpPhoneAuthorization {
     private final HttpClient http;
     private final String keycloakUrl;
     private final String internalToken;
+    private final OtpSecretHasher hasher;
 
     public JooqOtpPhoneAuthorization(
             DSLContext dsl,
             @org.springframework.beans.factory.annotation.Qualifier("otpHttpClient") HttpClient http,
             @Value("${tino.identity.otp.keycloak-url:http://keycloak:8080}") String keycloakUrl,
-            @Value("${tino.identity.otp.internal-token:}") String internalToken) {
+            @Value("${tino.identity.otp.internal-token:}") String internalToken,
+            OtpSecretHasher hasher) {
         this.dsl = dsl;
         this.http = http;
         this.keycloakUrl = keycloakUrl;
         this.internalToken = internalToken;
+        this.hasher = hasher;
     }
 
     @Override
@@ -150,5 +161,116 @@ public class JooqOtpPhoneAuthorization implements OtpPhoneAuthorization {
         } catch (org.jooq.exception.DataAccessException exception) {
             throw new IllegalStateException("phone identity is already bound", exception);
         }
+    }
+
+    @Override
+    @Transactional
+    public void replacePhone(UUID userId, String phoneE164) {
+        var phone = PhoneNumber.normalize(phoneE164);
+        if (internalToken == null || internalToken.isBlank()) {
+            throw new PhoneIdentityOperationException(
+                    new IllegalStateException("TINO_OTP_INTERNAL_TOKEN is not configured"));
+        }
+        var externalSubject = dsl.select(EXTERNAL_SUBJECT)
+                .from(USERS)
+                .where(USER_ID.eq(userId))
+                .fetchOptional(EXTERNAL_SUBJECT)
+                .orElseThrow(() -> new PhoneIdentityOperationException(
+                        new IllegalArgumentException("identity user not found")));
+        var phoneHash = hasher.hashPhone(phone.e164());
+        // Serialize replacements for the same destination phone before the
+        // external identity update, so two recovery flows cannot both pass the
+        // local uniqueness check.
+        dsl.fetch("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", phoneHash);
+        assertLocalDestinationAvailable(phoneHash, externalSubject);
+        updateKeycloakPhone(externalSubject, phone.e164());
+        replaceBinding(phoneHash, externalSubject);
+    }
+
+    @Override
+    public String normalize(String phoneInput) {
+        return PhoneNumber.normalize(phoneInput).e164();
+    }
+
+    private void replaceBinding(String phoneHash, String externalSubject) {
+        var now = OffsetDateTime.now(ZoneOffset.UTC);
+        var existingSubject = dsl.select(EXTERNAL_SUBJECT)
+                .from(IDENTITIES)
+                .where(PHONE_HASH.eq(phoneHash))
+                .forUpdate()
+                .fetchOptional(EXTERNAL_SUBJECT)
+                .orElse(null);
+        if (existingSubject != null && !existingSubject.equals(externalSubject)) {
+            throw new PhoneIdentityConflictException();
+        }
+        var oldHash = dsl.select(PHONE_HASH)
+                .from(IDENTITIES)
+                .where(EXTERNAL_SUBJECT.eq(externalSubject))
+                .forUpdate()
+                .fetchOptional(PHONE_HASH)
+                .orElse(null);
+        if (phoneHash.equals(oldHash)) {
+            dsl.update(IDENTITIES)
+                    .set(UPDATED_AT, now)
+                    .where(EXTERNAL_SUBJECT.eq(externalSubject))
+                    .execute();
+            return;
+        }
+        if (oldHash != null) {
+            dsl.deleteFrom(IDENTITIES)
+                    .where(EXTERNAL_SUBJECT.eq(externalSubject))
+                    .execute();
+        }
+        try {
+            dsl.insertInto(IDENTITIES)
+                    .columns(PHONE_HASH, EXTERNAL_SUBJECT, CREATED_AT, UPDATED_AT)
+                    .values(phoneHash, externalSubject, now, now)
+                    .execute();
+        } catch (org.jooq.exception.DataAccessException exception) {
+            throw new PhoneIdentityConflictException();
+        }
+    }
+
+    private void assertLocalDestinationAvailable(String phoneHash, String externalSubject) {
+        dsl.select(EXTERNAL_SUBJECT)
+                .from(IDENTITIES)
+                .where(PHONE_HASH.eq(phoneHash))
+                .forUpdate()
+                .fetchOptional(EXTERNAL_SUBJECT)
+                .filter(existingSubject -> !existingSubject.equals(externalSubject))
+                .ifPresent(existingSubject -> { throw new PhoneIdentityConflictException(); });
+    }
+
+    private void updateKeycloakPhone(String externalSubject, String phoneE164) {
+        var endpoint = keycloakUrl.replaceAll("/$", "")
+                + "/realms/tino/tino-otp/phone-binding";
+        var payload = "{\"phone\":\"" + jsonEscape(phoneE164)
+                + "\",\"external_subject\":\"" + jsonEscape(externalSubject) + "\"}";
+        try {
+            var response = http.send(HttpRequest.newBuilder(URI.create(endpoint))
+                    .timeout(java.time.Duration.ofSeconds(3))
+                    .header("X-Tino-Internal-Token", internalToken)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(payload))
+                    .build(), HttpResponse.BodyHandlers.discarding());
+            if (response.statusCode() == 409) {
+                throw new PhoneIdentityConflictException();
+            }
+            if (response.statusCode() != 204) {
+                throw new PhoneIdentityOperationException(
+                        new IllegalStateException("Keycloak phone binding returned " + response.statusCode()));
+            }
+        } catch (PhoneIdentityConflictException | PhoneIdentityOperationException exception) {
+            throw exception;
+        } catch (IOException exception) {
+            throw new PhoneIdentityOperationException(exception);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new PhoneIdentityOperationException(exception);
+        }
+    }
+
+    private static String jsonEscape(String value) {
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 }

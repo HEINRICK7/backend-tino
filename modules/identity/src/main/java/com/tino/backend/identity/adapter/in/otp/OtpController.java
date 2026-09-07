@@ -88,7 +88,13 @@ public class OtpController {
             throw new com.tino.backend.identity.application.exception.OtpInvalidRequestException();
         }
         try {
-            return OtpChallengePurpose.valueOf(value.trim().toUpperCase(java.util.Locale.ROOT));
+            var purpose = OtpChallengePurpose.valueOf(value.trim().toUpperCase(java.util.Locale.ROOT));
+            if (purpose == OtpChallengePurpose.PHONE_CHANGE) {
+                // Phone changes carry an authenticated user/business binding and
+                // must never be reachable through this pre-authentication route.
+                throw new com.tino.backend.identity.application.exception.OtpInvalidRequestException();
+            }
+            return purpose;
         } catch (IllegalArgumentException exception) {
             throw new com.tino.backend.identity.application.exception.OtpInvalidRequestException();
         }

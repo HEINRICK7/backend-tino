@@ -62,7 +62,7 @@ class M12MessagingHttpApiTest {
                     + "public.credit_idempotency_keys, public.credit_ledger_entries, public.credit_accounts, "
                     + "public.customer_idempotency_keys, public.customers, public.sync_event_rejections, "
                     + "public.sync_outbox, public.sync_changes, public.sync_event_claims, public.device_installations, "
-                    + "public.business_memberships, public.businesses, public.users");
+                    + "public.phone_change_requests, public.business_memberships, public.businesses, public.users");
             statement.execute("INSERT INTO public.users (id, external_subject, status, created_at, updated_at) VALUES "
                     + "('%s', '%s', 'ACTIVE', now(), now())".formatted(USER_ID, OWNER));
         }
