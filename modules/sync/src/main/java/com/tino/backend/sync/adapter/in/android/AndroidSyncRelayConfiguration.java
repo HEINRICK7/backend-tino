@@ -19,6 +19,7 @@ public class AndroidSyncRelayConfiguration {
             "direct.receipt.created",
             "customer.created",
             "customer.updated",
+            "customer.updated.reversed",
             "supplier.created",
             "supplier.product.mapping.created",
             "payment.agreement.created",
@@ -47,6 +48,7 @@ public class AndroidSyncRelayConfiguration {
     @Bean SyncEventHandler directReceiptCreatedRelay() { return relay("direct.receipt.created"); }
     @Bean SyncEventHandler customerCreatedRelay() { return relay("customer.created"); }
     @Bean SyncEventHandler customerUpdatedRelay() { return relay("customer.updated"); }
+    @Bean SyncEventHandler customerUpdatedReversedRelay() { return relay("customer.updated.reversed"); }
     @Bean SyncEventHandler supplierCreatedRelay() { return relay("supplier.created"); }
     @Bean SyncEventHandler supplierProductMappingCreatedRelay() { return relay("supplier.product.mapping.created"); }
     @Bean SyncEventHandler paymentAgreementCreatedRelay() { return relay("payment.agreement.created"); }
