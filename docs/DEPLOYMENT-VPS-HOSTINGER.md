@@ -58,7 +58,7 @@ app.tino.otimizanegocio.com  A  187.77.240.172
 ```
 
 The `app` host serves the Meu TINO PWA and proxies only `/api/` to the private
-TINO application port. The PWA is deployed atomically under `/opt/tino-pwa`
+TINO application port. The PWA is deployed atomically under `/opt/tino/pwa`
 by the same workflow; it does not create a Docker project or claim a port.
 
 Before the first deploy, confirm that these names resolve to the VPS. Do not

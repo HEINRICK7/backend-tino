@@ -248,7 +248,7 @@ jobs:
             return 1
           }
           tar -C pwa-dist -czf "$RUNNER_TEMP/tino-pwa.tar.gz" .
-          retry_scp "$RUNNER_TEMP/tino-pwa.tar.gz" "$VPS_USER@$VPS_HOST:/opt/tino-pwa-${GITHUB_SHA}.tar.gz"
+          retry_scp "$RUNNER_TEMP/tino-pwa.tar.gz" "$VPS_USER@$VPS_HOST:/opt/tino/pwa-${GITHUB_SHA}.tar.gz"
           printf '%s\n' "$TINO_ENV_FILE" \
             | sed '/^TINO_WHATSAPP_DELIVERY_ENABLED=/d' \
             | { cat; printf 'TINO_WHATSAPP_DELIVERY_ENABLED=%s\n' "$TINO_WHATSAPP_DELIVERY_ENABLED"; } \
@@ -355,6 +355,10 @@ jobs:
             echo 'Production deployment requires TINO_CUSTOMER_CHANNEL_SESSION_SECURE=true' >&2
             exit 34
           }
+          systemctl is-active --quiet nginx || {
+            echo 'The existing host Nginx service is not active; aborting without changing it' >&2
+            exit 25
+          }
           pwa_nginx_config=/etc/nginx/sites-available/tino-pwa.conf
           pwa_nginx_link=/etc/nginx/sites-enabled/tino-pwa.conf
           if test -e "$pwa_nginx_config" && ! grep -q 'managed by TINO PWA deployment' "$pwa_nginx_config"; then
@@ -365,11 +369,11 @@ jobs:
             echo "Refusing to overwrite an unrelated Nginx site entry: $pwa_nginx_link" >&2
             exit 36
           fi
-          pwa_release=/opt/tino-pwa/releases/$GITHUB_SHA
-          install -d -m 755 "$pwa_release" /opt/tino-pwa/releases
-          tar -xzf "/opt/tino-pwa-$GITHUB_SHA.tar.gz" -C "$pwa_release"
-          rm -f "/opt/tino-pwa-$GITHUB_SHA.tar.gz"
-          ln -sfn "$pwa_release" /opt/tino-pwa/current
+          pwa_release=/opt/tino/pwa/releases/$GITHUB_SHA
+          install -d -m 755 "$pwa_release" /opt/tino/pwa/releases
+          tar -xzf "/opt/tino/pwa-$GITHUB_SHA.tar.gz" -C "$pwa_release"
+          rm -f "/opt/tino/pwa-$GITHUB_SHA.tar.gz"
+          ln -sfn "$pwa_release" /opt/tino/pwa/current
           install -d -m 755 /var/www/tino-pwa-acme
           sed -e "s/__TINO_PWA_HOST__/$TINO_PWA_HOST/g" \
             /opt/tino/tino-pwa-http.conf > "$pwa_nginx_config"
@@ -404,10 +408,6 @@ jobs:
               }
             fi
           done
-          systemctl is-active --quiet nginx || {
-            echo 'The existing host Nginx service is not active; aborting without changing it' >&2
-            exit 25
-          }
           install -d -m 755 /var/www/tino-acme
           sed -e "s/__TINO_API_HOST__/$TINO_API_HOST/g" \
             -e "s/__TINO_AUTH_HOST__/$TINO_AUTH_HOST/g" \
