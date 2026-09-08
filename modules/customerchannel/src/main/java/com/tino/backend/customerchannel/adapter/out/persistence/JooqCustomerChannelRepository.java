@@ -26,7 +26,7 @@ public class JooqCustomerChannelRepository implements CustomerChannelRepository 
         dsl.execute("""
                 INSERT INTO public.customer_channels
                     (id, business_id, customer_id, status, created_at, updated_at)
-                VALUES (?, ?, ?, 'INVITED', ?, ?)
+                VALUES (?, ?, ?, 'INVITED', CAST(? AS TIMESTAMPTZ), CAST(? AS TIMESTAMPTZ))
                 ON CONFLICT (business_id, customer_id)
                 DO UPDATE SET updated_at = EXCLUDED.updated_at
                 """, id, businessId.value(), customerId, time(now), time(now));
@@ -71,7 +71,7 @@ public class JooqCustomerChannelRepository implements CustomerChannelRepository 
                 INSERT INTO public.customer_channel_invite_idempotency
                     (business_id, operation, idempotency_key, request_fingerprint,
                      customer_channel_id, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, CAST(? AS TIMESTAMPTZ))
                 ON CONFLICT (business_id, operation, idempotency_key) DO NOTHING
                 """, businessId.value(), operation, idempotencyKey, requestFingerprint,
                 channelId, time(createdAt)) == 1;
@@ -94,7 +94,7 @@ public class JooqCustomerChannelRepository implements CustomerChannelRepository 
     public void revokeOpenInvites(BusinessId businessId, UUID channelId, Instant now) {
         dsl.execute("""
                 UPDATE public.customer_invites
-                   SET revoked_at = ?
+                   SET revoked_at = CAST(? AS TIMESTAMPTZ)
                  WHERE business_id = ? AND customer_channel_id = ?
                    AND consumed_at IS NULL AND revoked_at IS NULL
                 """, time(now), businessId.value(), channelId);
@@ -106,7 +106,7 @@ public class JooqCustomerChannelRepository implements CustomerChannelRepository 
         dsl.execute("""
                 INSERT INTO public.customer_invites
                     (id, business_id, customer_channel_id, token_hash, expires_at, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, CAST(? AS TIMESTAMPTZ), CAST(? AS TIMESTAMPTZ))
                 """, id, businessId.value(), channelId, tokenHash, time(expiresAt), time(createdAt));
     }
 
@@ -118,7 +118,7 @@ public class JooqCustomerChannelRepository implements CustomerChannelRepository 
                   JOIN public.customer_channels c ON c.id = i.customer_channel_id
                  WHERE i.token_hash = ?
                    AND i.consumed_at IS NULL AND i.revoked_at IS NULL
-                   AND i.expires_at > ?
+                   AND i.expires_at > CAST(? AS TIMESTAMPTZ)
                    AND c.status IN ('INVITED', 'ACTIVE')
                 FOR UPDATE
                 """, tokenHash, time(now));
@@ -130,7 +130,7 @@ public class JooqCustomerChannelRepository implements CustomerChannelRepository 
 
     @Override
     public void consumeInvite(UUID inviteId, Instant now) {
-        dsl.execute("UPDATE public.customer_invites SET consumed_at = ? WHERE id = ?",
+        dsl.execute("UPDATE public.customer_invites SET consumed_at = CAST(? AS TIMESTAMPTZ) WHERE id = ?",
                 time(now), inviteId);
     }
 
@@ -141,12 +141,13 @@ public class JooqCustomerChannelRepository implements CustomerChannelRepository 
                 INSERT INTO public.customer_sessions
                     (id, customer_channel_id, business_id, customer_id, session_token_hash,
                      created_at, last_seen_at, expires_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, CAST(? AS TIMESTAMPTZ), CAST(? AS TIMESTAMPTZ), CAST(? AS TIMESTAMPTZ))
                 """, id, channelId, businessId.value(), customerId, tokenHash,
                 time(createdAt), time(createdAt), time(expiresAt));
         dsl.execute("""
                 UPDATE public.customer_channels
-                   SET status = 'ACTIVE', activated_at = COALESCE(activated_at, ?), updated_at = ?, last_access_at = ?
+                   SET status = 'ACTIVE', activated_at = COALESCE(activated_at, CAST(? AS TIMESTAMPTZ)),
+                       updated_at = CAST(? AS TIMESTAMPTZ), last_access_at = CAST(? AS TIMESTAMPTZ)
                  WHERE id = ?
                 """, time(createdAt), time(createdAt), time(createdAt), channelId);
     }
@@ -158,7 +159,7 @@ public class JooqCustomerChannelRepository implements CustomerChannelRepository 
                   FROM public.customer_sessions s
                   JOIN public.customer_channels c ON c.id = s.customer_channel_id
                  WHERE s.session_token_hash = ? AND s.revoked_at IS NULL
-                   AND s.expires_at > ? AND c.status = 'ACTIVE'
+                   AND s.expires_at > CAST(? AS TIMESTAMPTZ) AND c.status = 'ACTIVE'
                 """, tokenHash, time(now));
         return row == null ? Optional.empty() : Optional.of(new SessionRecord(
                 row.get("id", UUID.class), row.get("customer_channel_id", UUID.class),
@@ -168,13 +169,13 @@ public class JooqCustomerChannelRepository implements CustomerChannelRepository 
 
     @Override
     public void revokeSession(UUID sessionId, Instant now) {
-        dsl.execute("UPDATE public.customer_sessions SET revoked_at = ?, last_seen_at = ? WHERE id = ?",
+        dsl.execute("UPDATE public.customer_sessions SET revoked_at = CAST(? AS TIMESTAMPTZ), last_seen_at = CAST(? AS TIMESTAMPTZ) WHERE id = ?",
                 time(now), time(now), sessionId);
     }
 
     @Override
     public void touchChannel(UUID channelId, Instant now) {
-        dsl.execute("UPDATE public.customer_channels SET last_access_at = ?, updated_at = ? WHERE id = ?",
+        dsl.execute("UPDATE public.customer_channels SET last_access_at = CAST(? AS TIMESTAMPTZ), updated_at = CAST(? AS TIMESTAMPTZ) WHERE id = ?",
                 time(now), time(now), channelId);
     }
 
@@ -213,7 +214,7 @@ public class JooqCustomerChannelRepository implements CustomerChannelRepository 
                  WHERE business_id = ? AND customer_id = ?
                 """;
         if (beforeAt != null && beforeId != null) {
-            sql += " AND (created_at < ? OR (created_at = ? AND id < ?)) ";
+            sql += " AND (created_at < CAST(? AS TIMESTAMPTZ) OR (created_at = CAST(? AS TIMESTAMPTZ) AND id < ?)) ";
         }
         sql += " ORDER BY created_at DESC, id DESC LIMIT ?";
         var values = new java.util.ArrayList<Object>();
