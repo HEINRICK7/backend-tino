@@ -209,7 +209,7 @@ jobs:
             done
             return 1
           }
-          retry_ssh "$VPS_USER@$VPS_HOST" 'install -d -m 700 /opt/tino'
+          retry_ssh "$VPS_USER@$VPS_HOST" 'install -d -m 755 /opt/tino'
           retry_scp deploy/compose.vps.yaml "$VPS_USER@$VPS_HOST:/opt/tino/compose.vps.yaml"
           retry_scp docker/keycloak/configure-tino-otp-flow.sh "$VPS_USER@$VPS_HOST:/opt/tino/configure-tino-otp-flow.sh"
           retry_scp docker/keycloak/tino-realm.json "$VPS_USER@$VPS_HOST:/opt/tino/tino-realm.json"
