@@ -97,9 +97,11 @@ func TestSendOTPMapsProviderFailureToRetryableResponse(t *testing.T) {
 	}
 }
 
-func TestSendOTPUsesCorrelationBoundButtonWhenConfigured(t *testing.T) {
+func TestSendOTPNormalizesLegacyButtonPathToText(t *testing.T) {
 	var receivedBody string
+	var receivedPath string
 	provider := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		receivedPath = request.URL.Path
 		body, _ := io.ReadAll(request.Body)
 		receivedBody = string(body)
 		_, _ = writer.Write([]byte(`{"key":{"id":"provider-message-2"}}`))
@@ -124,10 +126,12 @@ func TestSendOTPUsesCorrelationBoundButtonWhenConfigured(t *testing.T) {
 	if response.Code != http.StatusAccepted {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusAccepted)
 	}
-	if !strings.Contains(receivedBody, `"type":"reply"`) ||
-		!strings.Contains(receivedBody, `"id":"TINO_AUTH_CONFIRM:challenge-1"`) ||
-		!strings.Contains(receivedBody, `"number":"5586995922924"`) {
-		t.Fatalf("provider button body = %q", receivedBody)
+	if receivedPath != "/message/sendText/tino" {
+		t.Fatalf("path = %q", receivedPath)
+	}
+	if !strings.Contains(receivedBody, `"number":"5586995922924"`) ||
+		!strings.Contains(receivedBody, `"text":"Seu código TINO é 123456. Expira em 5 min."`) {
+		t.Fatalf("provider text body = %q", receivedBody)
 	}
 }
 
@@ -231,6 +235,90 @@ func TestWebhookNormalizesEvolutionDeliveryReceipt(t *testing.T) {
 		if !strings.Contains(receivedBody, expected) {
 			t.Fatalf("normalized delivery body = %q, missing %s", receivedBody, expected)
 		}
+	}
+}
+
+func TestWebhookNormalizesEvolutionLidDeliveryReceipt(t *testing.T) {
+	var receivedBody string
+	backend := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		body, _ := io.ReadAll(request.Body)
+		receivedBody = string(body)
+		writer.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	cfg := &config{backendURL: backend.URL, backendToken: "backend-token", webhookSecret: "webhook-secret", client: backend.Client()}
+	payload := `{"event":"MESSAGES_UPDATE","data":{"key":{"remoteJid":"213631807533308@lid","fromMe":true,"id":"sent-lid-1"},"update":{"status":4},"messageTimestamp":1725364800}}`
+	mac := hmac.New(sha256.New, []byte(cfg.webhookSecret))
+	_, _ = mac.Write([]byte(payload))
+	request := httptest.NewRequest(http.MethodPost, "/webhooks/whatsapp", strings.NewReader(payload))
+	request.Header.Set("X-Tino-Webhook-Signature", hex.EncodeToString(mac.Sum(nil)))
+	response := httptest.NewRecorder()
+
+	cfg.receiveWebhook(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	for _, expected := range []string{`"event_type":"AUTH_DELIVERED"`, `"provider_message_id":"sent-lid-1"`, `"recipient_phone":""`} {
+		if !strings.Contains(receivedBody, expected) {
+			t.Fatalf("normalized LID delivery body = %q, missing %s", receivedBody, expected)
+		}
+	}
+}
+
+func TestWebhookNormalizesEvolutionV237FlatDeliveryReceipt(t *testing.T) {
+	var receivedBody string
+	backend := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		body, _ := io.ReadAll(request.Body)
+		receivedBody = string(body)
+		writer.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	cfg := &config{backendURL: backend.URL, backendToken: "backend-token", webhookSecret: "webhook-secret", client: backend.Client()}
+	payload := `{"event":"messages.update","data":{"keyId":"flat-sent-1","remoteJid":"213631807533308@lid","fromMe":true,"status":"DELIVERY_ACK","instanceId":"instance-1"},"date_time":"2026-09-07T23:00:00Z"}`
+	mac := hmac.New(sha256.New, []byte(cfg.webhookSecret))
+	_, _ = mac.Write([]byte(payload))
+	request := httptest.NewRequest(http.MethodPost, "/webhooks/whatsapp", strings.NewReader(payload))
+	request.Header.Set("X-Tino-Webhook-Signature", hex.EncodeToString(mac.Sum(nil)))
+	response := httptest.NewRecorder()
+
+	cfg.receiveWebhook(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	for _, expected := range []string{`"event_type":"AUTH_DELIVERED"`, `"provider_message_id":"flat-sent-1"`, `"recipient_phone":""`} {
+		if !strings.Contains(receivedBody, expected) {
+			t.Fatalf("normalized flat delivery body = %q, missing %s", receivedBody, expected)
+		}
+	}
+}
+
+func TestWebhookAcknowledgesEvolutionIntermediateDeliveryStatus(t *testing.T) {
+	backendCalls := 0
+	backend := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		backendCalls++
+		writer.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	cfg := &config{backendURL: backend.URL, backendToken: "backend-token", webhookSecret: "webhook-secret", client: backend.Client()}
+	payload := `{"event":"messages.update","data":{"keyId":"flat-pending-1","remoteJid":"558695389481@s.whatsapp.net","fromMe":true,"status":"SERVER_ACK","instanceId":"instance-1"}}`
+	mac := hmac.New(sha256.New, []byte(cfg.webhookSecret))
+	_, _ = mac.Write([]byte(payload))
+	request := httptest.NewRequest(http.MethodPost, "/webhooks/whatsapp", strings.NewReader(payload))
+	request.Header.Set("X-Tino-Webhook-Signature", hex.EncodeToString(mac.Sum(nil)))
+	response := httptest.NewRecorder()
+
+	cfg.receiveWebhook(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if backendCalls != 0 {
+		t.Fatalf("backend calls = %d, want 0 for an intermediate provider status", backendCalls)
 	}
 }
 

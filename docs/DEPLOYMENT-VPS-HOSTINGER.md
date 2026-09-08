@@ -78,6 +78,12 @@ VPS deploy always uses the immutable SHA tag. The host Nginx templates are
 [tino-http.conf](../deploy/nginx/tino-http.conf) and
 [tino.conf](../deploy/nginx/tino.conf).
 
+`TINO_KEYCLOAK_IMAGE` is intentionally mandatory in the VPS Compose contract.
+The TINO realm depends on the custom OTP provider, so an operator must pass
+the immutable custom Keycloak image tag (the workflow injects it from the
+published SHA). Falling back to the stock Keycloak image is unsafe: the
+container can become healthy while the OTP Browser Flow fails at runtime.
+
 ### `TINO_VPS_ENV` template
 
 Store values, not this template, as the GitHub environment secret:
@@ -101,6 +107,8 @@ TINO_OTP_DELIVERY_INTERNAL_TOKEN=generate-a-long-random-value
 WA_EVOLUTION_BASE_URL=http://evolution-api:8080
 WA_EVOLUTION_API_KEY=secret-from-evolution
 WA_EVOLUTION_INSTANCE=tino
+# Keep OTP delivery as plain text; sendButtons is provider/version dependent.
+WA_EVOLUTION_SEND_PATH=/message/sendText/{instance}
 WA_EVOLUTION_WEBHOOK_SECRET=generate-a-long-random-value
 OTEL_SDK_DISABLED=true
 ```

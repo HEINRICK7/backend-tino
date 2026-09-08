@@ -37,7 +37,9 @@ services:
     networks: [private]
 
   keycloak:
-    image: ${TINO_KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26.3}
+    # The realm requires the TINO OTP provider. Never silently fall back to
+    # the stock Keycloak image, which starts successfully but breaks login.
+    image: ${TINO_KEYCLOAK_IMAGE:?missing TINO_KEYCLOAK_IMAGE}
     command: ["start", "--import-realm"]
     environment:
       KC_DB: postgres
@@ -65,7 +67,7 @@ services:
 
   keycloak-otp-config:
     profiles: [otp]
-    image: ${TINO_KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26.3}
+    image: ${TINO_KEYCLOAK_IMAGE:?missing TINO_KEYCLOAK_IMAGE}
     depends_on:
       keycloak:
         condition: service_started
@@ -133,7 +135,10 @@ services:
       WA_EVOLUTION_BASE_URL: ${WA_EVOLUTION_BASE_URL:-}
       WA_EVOLUTION_API_KEY: ${WA_EVOLUTION_API_KEY:-}
       WA_EVOLUTION_INSTANCE: ${WA_EVOLUTION_INSTANCE:-}
-      WA_EVOLUTION_SEND_PATH: ${WA_EVOLUTION_SEND_PATH:-/message/sendButtons/{instance}}
+      # Evolution 2.3.7 does not reliably deliver interactive buttons.
+      # Keep production OTP delivery on plain text even if an old secret still
+      # contains WA_EVOLUTION_SEND_PATH=/message/sendButtons/{instance}.
+      WA_EVOLUTION_SEND_PATH: /message/sendText/{instance}
     expose: ["8080"]
     init: true
     read_only: true

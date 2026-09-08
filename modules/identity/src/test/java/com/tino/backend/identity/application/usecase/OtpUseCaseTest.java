@@ -215,6 +215,35 @@ class OtpUseCaseTest {
         assertThat(deliveryEvents.values).hasSize(1);
     }
 
+    @Test
+    void deliveryReceiptCanUseProviderMessageCorrelationWhenProviderSendsALid() {
+        var repository = new InMemoryChallenges();
+        var deliveryEvents = new InMemoryDeliveryEvents();
+        var issued = request(repository, new CapturingDelivery(), new FixedGenerator(),
+                new HmacOtpSecretHasher("test-only-secret")).execute(PHONE, "127.0.0.1");
+        var update = new UpdateOtpDeliveryStatus(repository, deliveryEvents,
+                Clock.fixed(NOW, ZoneOffset.UTC));
+
+        assertThat(update.execute("receipt-lid-1", "provider-message-1", "AUTH_DELIVERED", "", NOW))
+                .isEqualTo(com.tino.backend.identity.domain.model.OtpChallengeStatus.DELIVERED);
+        assertThat(repository.findByIdForUpdate(issued.challengeId()).orElseThrow().status())
+                .isEqualTo(com.tino.backend.identity.domain.model.OtpChallengeStatus.DELIVERED);
+    }
+
+    @Test
+    void deliveryReceiptAcceptsEvolutionBrazilianJidWithoutNinthDigit() {
+        var repository = new InMemoryChallenges();
+        var deliveryEvents = new InMemoryDeliveryEvents();
+        var issued = request(repository, new CapturingDelivery(), new FixedGenerator(),
+                new HmacOtpSecretHasher("test-only-secret")).execute("+5586995922924", "127.0.0.1");
+        var update = new UpdateOtpDeliveryStatus(repository, deliveryEvents,
+                Clock.fixed(NOW, ZoneOffset.UTC));
+
+        assertThat(update.execute("receipt-pn-1", "provider-message-1", "AUTH_DELIVERED",
+                "+558695922924", NOW))
+                .isEqualTo(com.tino.backend.identity.domain.model.OtpChallengeStatus.DELIVERED);
+    }
+
     private static RequestOtp request(
             InMemoryChallenges repository,
             CapturingDelivery delivery,

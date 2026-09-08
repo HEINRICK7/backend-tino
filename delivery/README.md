@@ -17,9 +17,18 @@ WA_EVOLUTION_INSTANCE=tino
 ```
 
 `WA_EVOLUTION_SEND_PATH` é opcional e usa `/message/sendText/{instance}`. O
-serviço não registra telefone, mensagem, OTP, tokens ou respostas do provider.
+serviço sempre envia OTP como texto simples: valores legados contendo
+`sendButtons` são normalizados para `sendText`, pois a Evolution pode aceitar a
+requisição interativa sem entregar a mensagem ao WhatsApp. O serviço não
+registra telefone, mensagem, OTP, tokens ou respostas do provider.
 Sem a configuração completa, health/readiness retorna `503`; não há falso
 sucesso.
+
+Para Evolution v2.3.7, `MESSAGES_UPDATE` chega como payload flat (`keyId`,
+`remoteJid`, `status`, `messageId`). O relay também aceita o formato legado,
+confirma estados intermediários como `PENDING`/`SERVER_ACK` sem alterar o OTP
+e só encaminha recibos terminais ao backend. Recibos de mensagens que não são
+OTP são reconhecidos sem falha, evitando retries do provider.
 
 O número remetente não aparece neste contrato: ele é a conta WhatsApp vinculada
 à instância `WA_EVOLUTION_INSTANCE` no Evolution. Cada request recebe somente
