@@ -470,6 +470,14 @@ jobs:
             echo "TINO PWA API proxy returned unexpected HTTP status $pwa_status" >&2
             exit 37
           }
+          pwa_activation_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            -X POST "https://$TINO_PWA_HOST/api/v1/customer-channel/activation" \
+            -H 'Content-Type: application/json' \
+            --data-binary '{"token":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}')"
+          test "$pwa_activation_status" = 410 || {
+            echo "TINO PWA activation proxy returned unexpected HTTP status $pwa_activation_status" >&2
+            exit 39
+          }
           activation_body=/tmp/tino-activation-smoke.json
           activation_status="$(curl --silent --show-error --output "$activation_body" --write-out '%{http_code}' \
             -X POST "https://$TINO_API_HOST/api/v1/customer-channel/activation" \
