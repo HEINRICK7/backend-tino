@@ -1,6 +1,6 @@
 # TINO — Identity WhatsApp OTP — Evidence
 
-Status: **PASS_VPS_OTP_DELIVERED_PENDING_DEVICE_AND_OIDC_SMOKE**
+Status: **PASS_VPS_OTP_AND_DEVICE_MATRIX_PENDING_OIDC_CONFIRMATION**
 
 ## Incidente de origem
 
@@ -31,6 +31,7 @@ Status: **PASS_VPS_OTP_DELIVERED_PENDING_DEVICE_AND_OIDC_SMOKE**
 | E2E OTP na VPS | request autorizado retornou `201 OTP_SENT`; consulta pública posterior retornou `200 OTP_DELIVERED`; PostgreSQL registrou `AUTH_DELIVERED` sem expor o código |
 | Compatibilidade Evolution v2.3.7 | relay normaliza `messages.update` flat e também o formato legado; `PENDING`/`SERVER_ACK` são intermediários, recibos terminais são processados |
 | Recibo não relacionado a OTP | evento terminal desconhecido foi aceito sem erro e sem gravação, evitando retry infinito da Evolution |
+| Matriz física Android | Samsung SM-A042M/API 34: instalação incremental, processo ativo e zero crash fatal |
 
 ## Gates pendentes
 
@@ -39,19 +40,21 @@ Status: **PASS_VPS_OTP_DELIVERED_PENDING_DEVICE_AND_OIDC_SMOKE**
 - o Browser Flow OIDC completo no dispositivo ainda não foi executado;
 - F7/Produção continua explicitamente bloqueado até esses gates externos.
 
-O deploy de `main` no commit `bc6cc34` passou pelo workflow `33450155521`.
+O deploy de `main` no commit `0f908e278760125198528658000f69a741312504` passou pelo
+workflow `34173443238` (gates, publish e deploy concluídos).
 Na VPS, `tino-app`, `tino-keycloak` e `tino-otp-delivery` estão ativos; o
 configurador do Browser Flow terminou com exit `0`. A readiness pública retorna
 HTTP 200. O E2E autorizado confirmou o caminho completo até a entrega: o
 backend criou o desafio, a Evolution entregou o provider message id, o relay
 aceitou os recibos flat da versão 2.3.7 e o backend persistiu `AUTH_DELIVERED`.
-O `tino-app` e o relay foram atualizados sem recriar Evolution, alterar banco,
-apagar volumes ou invalidar sessões.
+O `tino-app`, Keycloak OTP e relay foram atualizados sem recriar Evolution,
+alterar banco, apagar volumes ou invalidar sessões; Evolution e os bancos
+permaneceram ativos.
 
-Imagens usadas no runtime desta validação: `tino-app:otp-flatwebhook-20260907`
-e `tino-otp-delivery:flatwebhook-20260907`. Essas tags foram carregadas e
-recriadas somente nos serviços correspondentes; ainda não representam uma
-publicação imutável no registry/workflow.
+Imagens usadas no runtime desta validação, publicadas no GHCR por SHA:
+`ghcr.io/heinrick7/backend-tino:0f908e278760125198528658000f69a741312504`,
+`ghcr.io/heinrick7/backend-tino-keycloak:0f908e278760125198528658000f69a741312504`
+e `ghcr.io/heinrick7/backend-tino-delivery:0f908e278760125198528658000f69a741312504`.
 
 O fluxo Keycloak foi validado localmente com a imagem real do servidor e um
 delivery fake controlado: ticket válido produziu callback OIDC e code exchange
