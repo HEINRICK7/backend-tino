@@ -1,0 +1,191 @@
+name: deploy-pwa-vps
+
+on:
+  workflow_call:
+    inputs:
+      pwa_ref:
+        description: "Immutable Meu TINO PWA commit to publish"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tino-vps-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: tino-vps
+      url: https://app.tino.otimizanegocio.com
+    steps:
+      - name: Checkout deployment templates
+        uses: actions/checkout@v4
+        with:
+          repository: HEINRICK7/backend-tino
+          ref: main
+
+      - name: Checkout Meu TINO PWA
+        id: checkout_pwa
+        uses: actions/checkout@v4
+        with:
+          repository: HEINRICK7/meu-tino
+          ref: ${{ inputs.pwa_ref }}
+          path: meu-tino-pwa
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: meu-tino-pwa/package-lock.json
+
+      - name: Verify PWA
+        working-directory: meu-tino-pwa
+        run: |
+          npm ci
+          npm run format:check
+          npm test
+          npm run typecheck
+          npm run build
+
+      - name: Install SSH material
+        env:
+          VPS_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$VPS_PRIVATE_KEY"
+          test -n "$VPS_KNOWN_HOSTS"
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$VPS_PRIVATE_KEY" > "$HOME/.ssh/tino_deploy"
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/tino_deploy" "$HOME/.ssh/known_hosts"
+
+      - name: Upload PWA release
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_SSH_USER }}
+          PWA_SHA: ${{ steps.checkout_pwa.outputs.commit }}
+        working-directory: meu-tino-pwa
+        run: |
+          set -euo pipefail
+          test -n "$VPS_HOST"
+          test -n "$VPS_USER"
+          test -n "$PWA_SHA"
+          SSH_OPTS=(-4 -o BatchMode=yes -o ConnectTimeout=15 -o ConnectionAttempts=3 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 -i "$HOME/.ssh/tino_deploy")
+          retry_ssh() {
+            local attempt
+            for attempt in 1 2 3; do
+              if ssh "${SSH_OPTS[@]}" "$@"; then
+                return 0
+              fi
+              test "$attempt" -lt 3 && sleep $((attempt * 3))
+            done
+            return 1
+          }
+          retry_scp() {
+            local attempt
+            for attempt in 1 2 3; do
+              if scp "${SSH_OPTS[@]}" "$@"; then
+                return 0
+              fi
+              test "$attempt" -lt 3 && sleep $((attempt * 3))
+            done
+            return 1
+          }
+          tar -C dist -czf "$RUNNER_TEMP/tino-pwa.tar.gz" .
+          retry_ssh "$VPS_USER@$VPS_HOST" 'install -d -m 755 /opt/tino'
+          retry_scp "$RUNNER_TEMP/tino-pwa.tar.gz" "$VPS_USER@$VPS_HOST:/opt/tino/pwa-$PWA_SHA.tar.gz"
+          retry_scp ../deploy/nginx/tino-pwa-http.conf "$VPS_USER@$VPS_HOST:/opt/tino/tino-pwa-http.conf"
+          retry_scp ../deploy/nginx/tino-pwa.conf "$VPS_USER@$VPS_HOST:/opt/tino/tino-pwa.conf"
+
+      - name: Publish atomically and smoke test
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_SSH_USER }}
+          TINO_VPS_ENV: ${{ secrets.TINO_VPS_ENV }}
+          PWA_SHA: ${{ steps.checkout_pwa.outputs.commit }}
+          TINO_PWA_HOST: app.tino.otimizanegocio.com
+        run: |
+          set -euo pipefail
+          test -n "$VPS_HOST"
+          test -n "$VPS_USER"
+          test -n "$TINO_VPS_ENV"
+          test -n "$PWA_SHA"
+          dotenv_value() {
+            printf '%s\n' "$TINO_VPS_ENV" \
+              | sed -n "s/^$1=//p" \
+              | head -n 1 \
+              | sed -e "s/^['\"]//" -e "s/['\"]$//"
+          }
+          TINO_VPS_IPV4="$(dotenv_value TINO_VPS_IPV4)"
+          TINO_LETSENCRYPT_EMAIL="$(dotenv_value TINO_LETSENCRYPT_EMAIL)"
+          test -n "$TINO_VPS_IPV4"
+          test -n "$TINO_LETSENCRYPT_EMAIL"
+          SSH_OPTS=(-4 -o BatchMode=yes -o ConnectTimeout=15 -o ConnectionAttempts=3 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 -i "$HOME/.ssh/tino_deploy")
+          retry_ssh() {
+            local attempt
+            for attempt in 1 2 3; do
+              if ssh "${SSH_OPTS[@]}" "$@"; then
+                return 0
+              fi
+              test "$attempt" -lt 3 && sleep $((attempt * 3))
+            done
+            return 1
+          }
+          retry_ssh "$VPS_USER@$VPS_HOST" \
+            "TINO_PWA_HOST='$TINO_PWA_HOST' TINO_VPS_IPV4='$TINO_VPS_IPV4' TINO_LETSENCRYPT_EMAIL='$TINO_LETSENCRYPT_EMAIL' PWA_SHA='$PWA_SHA' /bin/sh -s" <<'REMOTE'
+          set -eu
+          cd /opt/tino
+          pwa_nginx_config=/etc/nginx/sites-available/tino-pwa.conf
+          pwa_nginx_link=/etc/nginx/sites-enabled/tino-pwa.conf
+          pwa_release=/opt/tino/pwa/releases/$PWA_SHA
+          previous_release="$(readlink -f /opt/tino/pwa/current 2>/dev/null || true)"
+          rollback() {
+            if test -n "$previous_release" && test -d "$previous_release"; then
+              ln -sfn "$previous_release" /opt/tino/pwa/current
+              nginx -t >/dev/null 2>&1 && systemctl reload nginx || true
+            fi
+          }
+          trap rollback EXIT
+          test "$(getent ahostsv4 "$TINO_PWA_HOST" | awk 'NR == 1 {print $1}')" = "$TINO_VPS_IPV4"
+          systemctl is-active --quiet nginx
+          if test -e "$pwa_nginx_config" && ! grep -q 'managed by TINO PWA deployment' "$pwa_nginx_config"; then
+            echo "Refusing to overwrite an unrelated Nginx configuration: $pwa_nginx_config" >&2
+            exit 35
+          fi
+          if test -e "$pwa_nginx_link" && ! test -L "$pwa_nginx_link"; then
+            echo "Refusing to overwrite an unrelated Nginx site entry: $pwa_nginx_link" >&2
+            exit 36
+          fi
+          test -f "/opt/tino/pwa-$PWA_SHA.tar.gz"
+          install -d -m 755 "$pwa_release" /opt/tino/pwa/releases /var/www/tino-pwa-acme
+          tar -xzf "/opt/tino/pwa-$PWA_SHA.tar.gz" -C "$pwa_release"
+          rm -f "/opt/tino/pwa-$PWA_SHA.tar.gz"
+          ln -sfn "$pwa_release" /opt/tino/pwa/current
+          sed -e "s/__TINO_PWA_HOST__/$TINO_PWA_HOST/g" \
+            /opt/tino/tino-pwa-http.conf > "$pwa_nginx_config"
+          ln -sfn "$pwa_nginx_config" "$pwa_nginx_link"
+          nginx -t
+          systemctl reload nginx
+          certbot certonly --webroot -w /var/www/tino-pwa-acme \
+            --cert-name tino-pwa \
+            -d "$TINO_PWA_HOST" \
+            --non-interactive --agree-tos --keep-until-expiring \
+            --email "$TINO_LETSENCRYPT_EMAIL"
+          sed -e "s/__TINO_PWA_HOST__/$TINO_PWA_HOST/g" \
+            /opt/tino/tino-pwa.conf > "$pwa_nginx_config"
+          nginx -t
+          systemctl reload nginx
+          curl --fail --silent --show-error "https://$TINO_PWA_HOST/" >/dev/null
+          curl --fail --silent --show-error "https://$TINO_PWA_HOST/manifest.webmanifest" >/dev/null
+          pwa_api_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "https://$TINO_PWA_HOST/api/v1/me")"
+          test "$pwa_api_status" = 401 || test "$pwa_api_status" = 403
+          trap - EXIT
+          echo "PWA release $PWA_SHA is live at https://$TINO_PWA_HOST"
+          REMOTE
