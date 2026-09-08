@@ -179,6 +179,24 @@ class PostgresTenantContextExecutorTest {
     }
 
     @Test
+    void nestedTenantOperationJoinsActiveTransactionWithoutDeadlock() {
+        assertThat(executor.execute(new BusinessId(BUSINESS_A),
+                () -> executor.execute(new BusinessId(BUSINESS_A),
+                        () -> appDsl.fetchValue("select count(*) from tenant_probe", Long.class))))
+                .isEqualTo(1L);
+        assertThat(currentTenantSetting()).isBlank();
+    }
+
+    @Test
+    void nestedTenantOperationCannotSwitchTenantInsideTransaction() {
+        assertThatThrownBy(() -> executor.execute(new BusinessId(BUSINESS_A),
+                () -> executor.execute(new BusinessId(BUSINESS_B), () -> null)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("cannot switch tenant inside an active transaction");
+        assertThat(currentTenantSetting()).isBlank();
+    }
+
+    @Test
     void repeatedTenantOperationsDoNotLeakAcrossPooledConnectionReuse() {
         for (int attempt = 0; attempt < 12; attempt++) {
             assertThat(visibleCount(new BusinessId(BUSINESS_A))).isEqualTo(1L);

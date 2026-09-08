@@ -60,7 +60,6 @@ public class CustomerChannelService {
         this.publicBaseUrl = publicBaseUrl.replaceAll("/+$", "");
     }
 
-    @Transactional
     public InviteResult invite(UUID userId, BusinessId businessId, UUID customerId, String idempotencyKey) {
         return invite(userId, businessId, customerId, idempotencyKey, null);
     }
@@ -71,18 +70,17 @@ public class CustomerChannelService {
      * reached the backend yet; an existing backend customer remains
      * authoritative.
      */
-    @Transactional
     public InviteResult invite(UUID userId, BusinessId businessId, UUID customerId, String idempotencyKey,
             InviteCustomerData customerData) {
         validateIdempotencyKey(idempotencyKey);
         Objects.requireNonNull(businessId, "businessId");
         Objects.requireNonNull(customerId, "customerId");
         var preparedCustomerData = prepareInviteCustomerData(customerData);
-        return authorization.execute(userId, businessId, authorizedBusiness -> {
+        var preparation = authorization.execute(userId, businessId, authorizedBusiness -> {
             var fingerprint = inviteFingerprint(authorizedBusiness, customerId, preparedCustomerData);
             var existing = channels.findInviteIdempotency(authorizedBusiness, INVITE_OPERATION, idempotencyKey);
             if (existing.isPresent()) {
-                return replayInvite(existing.orElseThrow(), fingerprint);
+                return InvitePreparation.completed(replayInvite(existing.orElseThrow(), fingerprint));
             }
 
             var customer = customers.find(authorizedBusiness, customerId)
@@ -102,7 +100,7 @@ public class CustomerChannelService {
                     fingerprint, channel.id(), now)) {
                 var concurrent = channels.findInviteIdempotency(authorizedBusiness, INVITE_OPERATION, idempotencyKey)
                         .orElseThrow(CustomerChannelInviteConflictException::new);
-                return replayInvite(concurrent, fingerprint);
+                return InvitePreparation.completed(replayInvite(concurrent, fingerprint));
             }
 
             var token = CustomerChannelToken.random();
@@ -110,17 +108,38 @@ public class CustomerChannelService {
             channels.insertInvite(ids.next(), authorizedBusiness, channel.id(), CustomerChannelToken.hash(token),
                     now.plus(INVITE_TTL), now);
 
-            var deliveryStatus = "FAILED";
-            try {
-                inviteDelivery.send(phone, publicBaseUrl + "/i/" + token,
-                        deliveryKey(authorizedBusiness, channel.id(), idempotencyKey));
-                deliveryStatus = "QUEUED";
-            } catch (RuntimeException ignored) {
-                // Compatibility contract: provider failure is returned as FAILED and is replayable.
-            }
+            // Mark the committed invite as failed until the provider acknowledges it.
+            // The provider call intentionally happens after this tenant transaction
+            // completes, so an unavailable provider cannot hold a database connection
+            // or a row lock. A later successful completion changes it to QUEUED.
             channels.completeInviteIdempotency(authorizedBusiness, INVITE_OPERATION, idempotencyKey,
-                    "INVITED", deliveryStatus);
-            return new InviteResult(channel.id(), "INVITED", deliveryStatus);
+                    "INVITED", "FAILED");
+            return InvitePreparation.pending(new PendingInvite(
+                    channel.id(),
+                    phone,
+                    publicBaseUrl + "/i/" + token,
+                    deliveryKey(authorizedBusiness, channel.id(), idempotencyKey)));
+        });
+
+        if (preparation.completed() != null) {
+            return preparation.completed();
+        }
+
+        var pending = preparation.pending();
+        try {
+            inviteDelivery.send(pending.phone(), pending.text(), pending.deliveryKey());
+        } catch (RuntimeException ignored) {
+            // The pessimistic FAILED status is already committed and replayable.
+            return new InviteResult(pending.channelId(), "INVITED", "FAILED");
+        }
+
+        // Persist the provider acknowledgement in a short, independent transaction.
+        // If this update fails, the invite remains FAILED and a retry never duplicates
+        // the provider call for the same idempotency key.
+        return authorization.execute(userId, businessId, authorizedBusiness -> {
+            channels.completeInviteIdempotency(authorizedBusiness, INVITE_OPERATION, idempotencyKey,
+                    "INVITED", "QUEUED");
+            return new InviteResult(pending.channelId(), "INVITED", "QUEUED");
         });
     }
 
@@ -189,6 +208,18 @@ public class CustomerChannelService {
         }
         return new InviteResult(record.channelId(), record.responseStatus(), record.deliveryStatus());
     }
+
+    private record InvitePreparation(InviteResult completed, PendingInvite pending) {
+        private static InvitePreparation completed(InviteResult result) {
+            return new InvitePreparation(result, null);
+        }
+
+        private static InvitePreparation pending(PendingInvite invite) {
+            return new InvitePreparation(null, invite);
+        }
+    }
+
+    private record PendingInvite(UUID channelId, String phone, String text, String deliveryKey) {}
 
     private static void validateIdempotencyKey(String value) {
         if (value == null || value.isBlank() || value.length() > 200) {

@@ -15,9 +15,10 @@ import org.springframework.transaction.support.TransactionTemplate;
  * PostgreSQL implementation of the kernel tenant-operation contract.
  *
  * <p>The tenant value is set with PostgreSQL's transaction-local
- * {@code set_config(..., true)}. A new transaction is used for each operation,
- * so the setting is discarded on both commit and rollback before the pooled
- * connection can be returned to its caller.</p>
+ * {@code set_config(..., true)}. An operation joins an already active
+ * transaction; otherwise a transaction is created for it. This avoids
+ * suspending a caller transaction (and its pooled connection), while the
+ * transaction-local setting is still discarded on commit or rollback.</p>
  */
 @Component
 public final class PostgresTenantContextExecutor implements TenantContextExecutor {
@@ -32,7 +33,7 @@ public final class PostgresTenantContextExecutor implements TenantContextExecuto
         jdbc = new JdbcTemplate(Objects.requireNonNull(dataSource, "dataSource"));
         transactions = new TransactionTemplate(
                 Objects.requireNonNull(transactionManager, "transactionManager"));
-        transactions.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        transactions.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
         transactions.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
     }
 
@@ -47,6 +48,12 @@ public final class PostgresTenantContextExecutor implements TenantContextExecuto
     }
 
     private void setTenantContext(BusinessId businessId) {
+        var current = jdbc.queryForObject(
+                "select current_setting('app.business_id', true)", String.class);
+        if (current != null && !current.isBlank()
+                && !current.equals(businessId.value().toString())) {
+            throw new IllegalStateException("cannot switch tenant inside an active transaction");
+        }
         jdbc.queryForObject(SET_TENANT_CONTEXT, String.class, businessId.value().toString());
     }
 }
