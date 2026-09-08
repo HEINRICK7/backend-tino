@@ -276,7 +276,7 @@ jobs:
           retry_ssh "$VPS_USER@$VPS_HOST" \
             "TINO_IMAGE='$TINO_IMAGE' TINO_KEYCLOAK_IMAGE='$TINO_KEYCLOAK_IMAGE' TINO_DELIVERY_IMAGE='$TINO_DELIVERY_IMAGE' docker compose --env-file /opt/tino/.env.next -f /opt/tino/compose.vps.yaml config --quiet"
           if ! ssh "${SSH_OPTS[@]}" "$VPS_USER@$VPS_HOST" \
-            "TINO_IMAGE='$TINO_IMAGE' TINO_KEYCLOAK_IMAGE='$TINO_KEYCLOAK_IMAGE' TINO_DELIVERY_IMAGE='$TINO_DELIVERY_IMAGE' TINO_PWA_HOST='$TINO_PWA_HOST' /bin/sh -s" <<'REMOTE'
+            "TINO_IMAGE='$TINO_IMAGE' TINO_KEYCLOAK_IMAGE='$TINO_KEYCLOAK_IMAGE' TINO_DELIVERY_IMAGE='$TINO_DELIVERY_IMAGE' TINO_PWA_HOST='$TINO_PWA_HOST' TINO_RELEASE_SHA='$GITHUB_SHA' /bin/sh -s" <<'REMOTE'
           set -eu
           cd /opt/tino
           staged_env=/opt/tino/.env.next
@@ -369,10 +369,10 @@ jobs:
             echo "Refusing to overwrite an unrelated Nginx site entry: $pwa_nginx_link" >&2
             exit 36
           fi
-          pwa_release=/opt/tino/pwa/releases/$GITHUB_SHA
+          pwa_release=/opt/tino/pwa/releases/$TINO_RELEASE_SHA
           install -d -m 755 "$pwa_release" /opt/tino/pwa/releases
-          tar -xzf "/opt/tino/pwa-$GITHUB_SHA.tar.gz" -C "$pwa_release"
-          rm -f "/opt/tino/pwa-$GITHUB_SHA.tar.gz"
+          tar -xzf "/opt/tino/pwa-$TINO_RELEASE_SHA.tar.gz" -C "$pwa_release"
+          rm -f "/opt/tino/pwa-$TINO_RELEASE_SHA.tar.gz"
           ln -sfn "$pwa_release" /opt/tino/pwa/current
           install -d -m 755 /var/www/tino-pwa-acme
           sed -e "s/__TINO_PWA_HOST__/$TINO_PWA_HOST/g" \
