@@ -23,6 +23,9 @@ public record PhoneNumber(String e164) {
             digits = digits.substring(1);
         }
         if (digits.startsWith("55")) {
+            if (digits.length() == 12 && digits.charAt(4) >= '6') {
+                digits = digits.substring(0, 4) + "9" + digits.substring(4);
+            }
             return new PhoneNumber("+" + digits);
         }
         if (digits.length() == 10 || digits.length() == 11) {

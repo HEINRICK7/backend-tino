@@ -34,9 +34,21 @@ public class OtpDeliveryWebhookController {
             @RequestBody(required = false) DeliveryEvent event) {
         if (!matches(suppliedToken)) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         if (event == null) return ResponseEntity.badRequest().build();
-        var status = update.execute(event.providerEventId(), event.providerMessageId(), event.eventType(),
-                event.recipientPhone(), event.occurredAt());
-        return ResponseEntity.ok(new DeliveryResponse(event.providerMessageId(), status.canonical().name()));
+        try {
+            var status = update.execute(event.providerEventId(), event.providerMessageId(), event.eventType(),
+                    event.recipientPhone(), event.occurredAt());
+            return ResponseEntity.ok(new DeliveryResponse(event.providerMessageId(), status.canonical().name()));
+        } catch (IllegalArgumentException exception) {
+            // The Evolution instance also emits receipts for messages that are
+            // not OTP challenges. A receipt is safely acknowledged when it has
+            // no matching OTP correlation, otherwise the provider retries a
+            // permanently irrelevant event and floods the relay with errors.
+            if ("unknown OTP provider message".equals(exception.getMessage())
+                    || "OTP challenge expired".equals(exception.getMessage())) {
+                return ResponseEntity.noContent().build();
+            }
+            throw exception;
+        }
     }
 
     private boolean matches(String suppliedToken) {

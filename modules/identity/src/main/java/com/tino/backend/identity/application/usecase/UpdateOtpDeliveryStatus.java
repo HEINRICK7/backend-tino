@@ -25,7 +25,7 @@ public final class UpdateOtpDeliveryStatus {
     public OtpChallengeStatus execute(String providerEventId, String providerMessageId,
             String eventType, String recipientPhone, Instant occurredAt) {
         if (blank(providerEventId) || blank(providerMessageId) || blank(eventType)
-                || blank(recipientPhone) || occurredAt == null) {
+                || occurredAt == null) {
             throw new IllegalArgumentException("invalid OTP delivery event");
         }
         var duplicate = events.findByProviderEventId(providerEventId);
@@ -36,8 +36,12 @@ public final class UpdateOtpDeliveryStatus {
         }
         var challenge = challenges.findByProviderMessageIdForUpdate(providerMessageId)
                 .orElseThrow(() -> new IllegalArgumentException("unknown OTP provider message"));
-        var recipient = PhoneNumber.normalize(recipientPhone);
-        if (!challenge.phone().equals(recipient)) {
+        // Evolution can report the recipient as a WhatsApp LID (for example
+        // 213631807533308@lid) instead of the phone number. The provider
+        // message id already binds this receipt to the OTP challenge, so use
+        // the challenge phone when the provider cannot expose a PN number.
+        var recipient = blank(recipientPhone) ? challenge.phone() : PhoneNumber.normalize(recipientPhone);
+        if (!blank(recipientPhone) && !sameBrazilianPhoneVariant(challenge.phone(), recipient)) {
             throw new IllegalArgumentException("OTP delivery recipient does not match challenge");
         }
         var now = Instant.now(clock);
@@ -64,5 +68,18 @@ public final class UpdateOtpDeliveryStatus {
 
     private static boolean blank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private static boolean sameBrazilianPhoneVariant(PhoneNumber expected, PhoneNumber actual) {
+        return expected.equals(actual)
+                || withoutBrazilianNinthDigit(expected.e164()).equals(actual.e164())
+                || withoutBrazilianNinthDigit(actual.e164()).equals(expected.e164());
+    }
+
+    private static String withoutBrazilianNinthDigit(String phone) {
+        if (phone.matches("\\+55[1-9][0-9]9[0-9]{8}")) {
+            return phone.substring(0, 5) + phone.substring(6);
+        }
+        return phone;
     }
 }

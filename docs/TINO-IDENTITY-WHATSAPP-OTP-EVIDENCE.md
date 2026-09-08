@@ -1,6 +1,6 @@
 # TINO — Identity WhatsApp OTP — Evidence
 
-Status: **PASS_VPS_DEPLOYED_PENDING_REAL_OTP_AND_DEVICE_SMOKE**
+Status: **PASS_VPS_OTP_DELIVERED_PENDING_DEVICE_AND_OIDC_SMOKE**
 
 ## Incidente de origem
 
@@ -28,21 +28,30 @@ Status: **PASS_VPS_DEPLOYED_PENDING_REAL_OTP_AND_DEVICE_SMOKE**
 | Compose | `docker compose ... config --quiet` passou |
 | Gates completos | `./gradlew check architecture migrations --no-daemon` passou; 200 testes da aplicação |
 | Integridade do diff e segredos | `git diff --check` e `./scripts/secret-scan.sh` passaram |
+| E2E OTP na VPS | request autorizado retornou `201 OTP_SENT`; consulta pública posterior retornou `200 OTP_DELIVERED`; PostgreSQL registrou `AUTH_DELIVERED` sem expor o código |
+| Compatibilidade Evolution v2.3.7 | relay normaliza `messages.update` flat e também o formato legado; `PENDING`/`SERVER_ACK` são intermediários, recibos terminais são processados |
+| Recibo não relacionado a OTP | evento terminal desconhecido foi aceito sem erro e sem gravação, evitando retry infinito da Evolution |
 
 ## Gates pendentes
 
-- falta executar uma solicitação OTP real com um número de teste autorizado;
-  as credenciais de runtime estão configuradas na VPS e o delivery está ativo;
 - o smoke Android físico/emulador até `bootstrap → READY` ainda não foi
   executado;
-- F7/Produção continua explicitamente bloqueado.
+- o Browser Flow OIDC completo no dispositivo ainda não foi executado;
+- F7/Produção continua explicitamente bloqueado até esses gates externos.
 
 O deploy de `main` no commit `bc6cc34` passou pelo workflow `33450155521`.
 Na VPS, `tino-app`, `tino-keycloak` e `tino-otp-delivery` estão ativos; o
 configurador do Browser Flow terminou com exit `0`. A readiness pública retorna
-HTTP 200 e uma chamada pre-auth sem bearer, usando telefone inválido, retorna
-HTTP 400 `INVALID_OTP_REQUEST`, confirmando que o endpoint de início está
-acessível sem sessão e sem enviar mensagem.
+HTTP 200. O E2E autorizado confirmou o caminho completo até a entrega: o
+backend criou o desafio, a Evolution entregou o provider message id, o relay
+aceitou os recibos flat da versão 2.3.7 e o backend persistiu `AUTH_DELIVERED`.
+O `tino-app` e o relay foram atualizados sem recriar Evolution, alterar banco,
+apagar volumes ou invalidar sessões.
+
+Imagens usadas no runtime desta validação: `tino-app:otp-flatwebhook-20260907`
+e `tino-otp-delivery:flatwebhook-20260907`. Essas tags foram carregadas e
+recriadas somente nos serviços correspondentes; ainda não representam uma
+publicação imutável no registry/workflow.
 
 O fluxo Keycloak foi validado localmente com a imagem real do servidor e um
 delivery fake controlado: ticket válido produziu callback OIDC e code exchange
@@ -71,6 +80,7 @@ configuração do provider está incompleta.
 Configurar somente por secrets/runtime: `TINO_OTP_ENABLED`,
 `TINO_OTP_HASH_SECRET`, `TINO_OTP_INTERNAL_TOKEN`,
 `TINO_OTP_DELIVERY_INTERNAL_TOKEN`, `WA_EVOLUTION_BASE_URL`,
-`WA_EVOLUTION_API_KEY` e `WA_EVOLUTION_INSTANCE`. Executar request, entrega,
-verify, Browser Flow OIDC, bootstrap e reexecução; nunca registrar OTP, token,
-telefone em claro ou segredo.
+`WA_EVOLUTION_API_KEY` e `WA_EVOLUTION_INSTANCE`. A request e a entrega já
+estão comprovadas na VPS; falta confirmar o código no telefone autorizado e
+executar `verify`, Browser Flow OIDC, bootstrap até `READY` e reexecução. Nunca
+registrar OTP, token, telefone em claro ou segredo.

@@ -15,23 +15,25 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
 var brazilianPhone = regexp.MustCompile(`^\+55[1-9][0-9](9[0-9]{8}|[2-5][0-9]{7})$`)
 
 type config struct {
-	internalToken string
-	backendURL    string
-	backendToken  string
-	webhookSecret string
-	webhookToken  string
-	masterPhone   string
-	providerURL   string
-	providerKey   string
-	instance      string
-	sendPath      string
-	client        *http.Client
+	internalToken      string
+	backendURL         string
+	backendToken       string
+	webhookSecret      string
+	webhookToken       string
+	masterPhone        string
+	providerURL        string
+	providerKey        string
+	instance           string
+	sendPath           string
+	client             *http.Client
+	deliveryRecipients sync.Map
 }
 
 type otpMessage struct {
@@ -64,28 +66,18 @@ type providerMessage struct {
 	Text   string `json:"text"`
 }
 
-type providerButtonMessage struct {
-	Number      string           `json:"number"`
-	Title       string           `json:"title"`
-	Description string           `json:"description"`
-	Footer      string           `json:"footer"`
-	Buttons     []providerButton `json:"buttons"`
-}
-
-type providerButton struct {
-	Type        string `json:"type"`
-	Title       string `json:"title"`
-	DisplayText string `json:"displayText"`
-	ID          string `json:"id"`
-}
-
 type evolutionWebhook struct {
-	Event string           `json:"event"`
-	Data  evolutionMessage `json:"data"`
+	Event    string           `json:"event"`
+	DateTime string           `json:"date_time"`
+	Data     evolutionMessage `json:"data"`
 }
 
 type evolutionMessage struct {
 	Key              evolutionMessageKey `json:"key"`
+	KeyID            string              `json:"keyId"`
+	RemoteJID        string              `json:"remoteJid"`
+	FromMe           *bool               `json:"fromMe"`
+	Status           json.RawMessage     `json:"status"`
 	Message          json.RawMessage     `json:"message"`
 	MessageTimestamp json.RawMessage     `json:"messageTimestamp"`
 	MessageType      string              `json:"messageType"`
@@ -157,8 +149,11 @@ func loadConfig() *config {
 		providerURL:   strings.TrimRight(os.Getenv("WA_EVOLUTION_BASE_URL"), "/"),
 		providerKey:   os.Getenv("WA_EVOLUTION_API_KEY"),
 		instance:      os.Getenv("WA_EVOLUTION_INSTANCE"),
-		sendPath:      valueOr(os.Getenv("WA_EVOLUTION_SEND_PATH"), "/message/sendButtons/{instance}"),
-		client:        &http.Client{Timeout: 5 * time.Second},
+		// OTP is always delivered as plain text. Evolution 2.3.7 may accept
+		// interactive buttons without delivering them, so stale button paths
+		// are normalized below as a final safety boundary.
+		sendPath: normalizeSendPath(os.Getenv("WA_EVOLUTION_SEND_PATH")),
+		client:   &http.Client{Timeout: 5 * time.Second},
 	}
 }
 
@@ -167,6 +162,13 @@ func valueOr(value, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func normalizeSendPath(value string) string {
+	if strings.Contains(strings.ToLower(value), "sendbuttons") {
+		return "/message/sendText/{instance}"
+	}
+	return valueOr(value, "/message/sendText/{instance}")
 }
 
 func (c *config) ready() bool {
@@ -261,16 +263,31 @@ func (c *config) receiveWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 	var event confirmationEvent
 	var delivery deliveryEvent
+	var evolution evolutionWebhook
+	evolutionPayload := json.Unmarshal(body, &evolution) == nil && evolution.Event != ""
 	callbackPath := "/internal/v1/identity/otp/events"
 	if normalized, ok := normalizeConfirmationEvent(body); ok {
 		event = normalized
 	} else if normalized, ok := normalizeDeliveryEvent(body); ok {
 		delivery = normalized
+		if recipient, found := c.deliveryRecipients.Load(delivery.ProviderMessageID); found {
+			delivery.RecipientPhone, _ = recipient.(string)
+		}
 		callbackPath = "/internal/v1/identity/otp/delivery-events"
+	} else if evolutionPayload {
+		// Evolution sends all configured events to this endpoint. Only an
+		// authentication reply or a terminal outgoing delivery receipt is
+		// relevant to TINO; unrelated/intermediate events must still be
+		// acknowledged or Evolution will retry and eventually discard them.
+		writeResult(w, http.StatusOK, result{Status: "IGNORED", Provider: "WA_EVOLUTION"})
+		return
 	} else if err := json.Unmarshal(body, &event); err != nil || !validConfirmationEvent(event) {
 		if err := json.Unmarshal(body, &delivery); err != nil || !validDeliveryEvent(delivery) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
+		}
+		if recipient, found := c.deliveryRecipients.Load(delivery.ProviderMessageID); found {
+			delivery.RecipientPhone, _ = recipient.(string)
 		}
 		callbackPath = "/internal/v1/identity/otp/delivery-events"
 	}
@@ -327,7 +344,7 @@ func validDeliveryEvent(event deliveryEvent) bool {
 	return event.ProviderEventID != "" && len(event.ProviderEventID) <= 200 &&
 		event.ProviderMessageID != "" && len(event.ProviderMessageID) <= 200 &&
 		(event.EventType == "AUTH_DELIVERED" || event.EventType == "AUTH_DELIVERY_FAILED") &&
-		brazilianPhone.MatchString(event.RecipientPhone) && timestampError == nil
+		(event.RecipientPhone == "" || brazilianPhone.MatchString(event.RecipientPhone)) && timestampError == nil
 }
 
 func (c *config) validWebhookSignature(signature string, payload []byte) bool {
@@ -394,49 +411,66 @@ func normalizeDeliveryEvent(payload []byte) (deliveryEvent, bool) {
 		return direct, true
 	}
 	var webhook evolutionWebhook
-	if json.Unmarshal(payload, &webhook) != nil || !webhook.Data.Key.FromMe ||
+	if json.Unmarshal(payload, &webhook) != nil ||
 		(webhook.Event != "" && !strings.EqualFold(webhook.Event, "MESSAGES_UPDATE") &&
 			!strings.EqualFold(webhook.Event, "messages.update")) {
 		return deliveryEvent{}, false
 	}
-	status := evolutionDeliveryStatus(webhook.Data.Update.Status)
-	if webhook.Data.Key.ID == "" || status == 0 {
+	providerMessageID, remoteJID, fromMe, rawStatus := webhook.Data.deliveryUpdateFields()
+	if !fromMe || providerMessageID == "" {
 		return deliveryEvent{}, false
 	}
-	eventType := "AUTH_DELIVERY_FAILED"
-	if status >= 4 {
-		eventType = "AUTH_DELIVERED"
+	eventType, terminal := evolutionDeliveryOutcome(rawStatus)
+	if !terminal {
+		return deliveryEvent{}, false
 	}
 	digest := sha256.Sum256(payload)
+	occurredAt := evolutionOccurredAt(webhook.Data.MessageTimestamp)
+	if occurredAt == "" {
+		occurredAt = webhook.DateTime
+	}
 	event := deliveryEvent{
 		ProviderEventID:   hex.EncodeToString(digest[:]),
-		ProviderMessageID: webhook.Data.Key.ID,
+		ProviderMessageID: providerMessageID,
 		EventType:         eventType,
-		RecipientPhone:    normalizeWhatsAppPhone(webhook.Data.Key.RemoteJID),
-		OccurredAt:        evolutionOccurredAt(webhook.Data.MessageTimestamp),
+		RecipientPhone:    normalizeWhatsAppPhone(remoteJID),
+		OccurredAt:        occurredAt,
 	}
 	return event, validDeliveryEvent(event)
 }
 
-func evolutionDeliveryStatus(raw json.RawMessage) int {
-	var numeric int
-	if json.Unmarshal(raw, &numeric) == nil {
-		return numeric
+func (m evolutionMessage) deliveryUpdateFields() (string, string, bool, json.RawMessage) {
+	if m.Key.ID != "" || m.Key.RemoteJID != "" {
+		return m.Key.ID, m.Key.RemoteJID, m.Key.FromMe, m.Update.Status
 	}
+	return m.KeyID, m.RemoteJID, m.FromMe != nil && *m.FromMe, m.Status
+}
+
+func evolutionDeliveryOutcome(raw json.RawMessage) (string, bool) {
 	var value string
 	if json.Unmarshal(raw, &value) == nil {
 		switch strings.ToUpper(value) {
 		case "ERROR":
-			return 1
-		case "PENDING":
-			return 2
-		case "SERVER_ACK":
-			return 3
+			return "AUTH_DELIVERY_FAILED", true
 		case "DELIVERY_ACK", "READ", "PLAYED":
-			return 4
+			return "AUTH_DELIVERED", true
 		}
+		return "", false
 	}
-	return 0
+	var numeric int
+	if json.Unmarshal(raw, &numeric) != nil {
+		return "", false
+	}
+	// Baileys WAMessageStatus values are ERROR=0, PENDING=1,
+	// SERVER_ACK=2, DELIVERY_ACK=3, READ=4 and PLAYED=5.
+	switch numeric {
+	case 0:
+		return "AUTH_DELIVERY_FAILED", true
+	case 3, 4, 5:
+		return "AUTH_DELIVERED", true
+	default:
+		return "", false
+	}
 }
 
 func firstNonBlank(values ...string) string {
@@ -455,6 +489,9 @@ func normalizeWhatsAppPhone(value string) string {
 	}
 	value = strings.TrimPrefix(value, "+")
 	if strings.HasPrefix(value, "55") {
+		if len(value) == 12 && value[4] >= '6' {
+			value = value[:4] + "9" + value[4:]
+		}
 		return "+" + value
 	}
 	return ""
@@ -478,24 +515,9 @@ func evolutionOccurredAt(raw json.RawMessage) string {
 }
 
 func (c *config) sendToProvider(ctx context.Context, message otpMessage) (string, string) {
-	path := strings.ReplaceAll(c.sendPath, "{instance}", c.instance)
+	path := strings.ReplaceAll(normalizeSendPath(c.sendPath), "{instance}", c.instance)
 	text := "Seu código TINO é " + message.Code + ". Expira em " + strconv.Itoa(message.ExpiresMinutes) + " min."
-	var requestBody any = providerMessage{Number: strings.TrimPrefix(message.Recipient, "+"), Text: text}
-	if strings.Contains(strings.ToLower(c.sendPath), "sendbuttons") {
-		requestBody = providerButtonMessage{
-			Number:      strings.TrimPrefix(message.Recipient, "+"),
-			Title:       "Confirme seu acesso ao TINO",
-			Description: text,
-			Footer:      "O código continua disponível como fallback.",
-			Buttons: []providerButton{{
-				Type:        "reply",
-				Title:       "Confirmar acesso",
-				DisplayText: "Confirmar acesso",
-				ID:          "TINO_AUTH_CONFIRM:" + message.CorrelationID,
-			}},
-		}
-	}
-	body, err := json.Marshal(requestBody)
+	body, err := json.Marshal(providerMessage{Number: strings.TrimPrefix(message.Recipient, "+"), Text: text})
 	if err != nil {
 		return "PERMANENT_FAILURE", ""
 	}
@@ -521,6 +543,7 @@ func (c *config) sendToProvider(ctx context.Context, message otpMessage) (string
 		if json.Unmarshal(responseBody, &sent) != nil || sent.Key.ID == "" {
 			return "RETRYABLE_FAILURE", ""
 		}
+		c.deliveryRecipients.Store(sent.Key.ID, message.Recipient)
 		return "ACCEPTED", sent.Key.ID
 	}
 	if response.StatusCode == 408 || response.StatusCode == 429 || response.StatusCode >= 500 {
