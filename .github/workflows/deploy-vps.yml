@@ -470,6 +470,19 @@ jobs:
             echo "TINO PWA API proxy returned unexpected HTTP status $pwa_status" >&2
             exit 37
           }
+          activation_body=/tmp/tino-activation-smoke.json
+          activation_status="$(curl --silent --show-error --output "$activation_body" --write-out '%{http_code}' \
+            -X POST "https://$TINO_API_HOST/api/v1/customer-channel/activation" \
+            -H 'Content-Type: application/json' \
+            --data-binary '{"token":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}')"
+          if test "$activation_status" != 410; then
+            echo "TINO customer-channel activation returned unexpected HTTP status $activation_status for an invalid token" >&2
+            echo 'Recent customer-channel backend diagnostics:' >&2
+            compose logs --no-color --tail=160 app 2>&1 \
+              | grep -Ei 'customer.?channel|exception|error|warn|sql|permission|denied|401|403|500' \
+              | tail -n 100 >&2 || true
+            exit 38
+          fi
           curl --fail --silent --show-error "https://$TINO_PWA_HOST/" >/dev/null
           curl --fail --silent --show-error "https://$TINO_PWA_HOST/manifest.webmanifest" >/dev/null
           REMOTE
