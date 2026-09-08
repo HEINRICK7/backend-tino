@@ -2,6 +2,7 @@ package com.tino.backend.customerchannel.application.service;
 
 import com.tino.backend.business.application.port.in.BusinessAuthorization;
 import com.tino.backend.customer.application.port.out.CustomerRepository;
+import com.tino.backend.customer.domain.model.Customer;
 import com.tino.backend.customer.domain.model.CustomerStatus;
 import com.tino.backend.customerchannel.application.model.CustomerChannelViews;
 import com.tino.backend.customerchannel.application.port.in.CustomerChannelPrincipal;
@@ -59,18 +60,31 @@ public class CustomerChannelService {
 
     @Transactional
     public InviteResult invite(UUID userId, BusinessId businessId, UUID customerId, String idempotencyKey) {
+        return invite(userId, businessId, customerId, idempotencyKey, null);
+    }
+
+    /**
+     * Sends an invite for a customer. The optional customer data is used only
+     * to materialize a customer that exists in the merchant app but has not
+     * reached the backend yet; an existing backend customer remains
+     * authoritative.
+     */
+    @Transactional
+    public InviteResult invite(UUID userId, BusinessId businessId, UUID customerId, String idempotencyKey,
+            InviteCustomerData customerData) {
         validateIdempotencyKey(idempotencyKey);
         Objects.requireNonNull(businessId, "businessId");
         Objects.requireNonNull(customerId, "customerId");
+        var preparedCustomerData = prepareInviteCustomerData(customerData);
         return authorization.execute(userId, businessId, authorizedBusiness -> {
-            var fingerprint = inviteFingerprint(authorizedBusiness, customerId);
+            var fingerprint = inviteFingerprint(authorizedBusiness, customerId, preparedCustomerData);
             var existing = channels.findInviteIdempotency(authorizedBusiness, INVITE_OPERATION, idempotencyKey);
             if (existing.isPresent()) {
                 return replayInvite(existing.orElseThrow(), fingerprint);
             }
 
             var customer = customers.find(authorizedBusiness, customerId)
-                    .orElseThrow(CustomerChannelAccessDeniedException::new);
+                    .orElseGet(() -> materializeCustomer(authorizedBusiness, customerId, preparedCustomerData));
             if (!authorizedBusiness.equals(customer.businessId()) || !customerId.equals(customer.id())
                     || customer.status() != CustomerStatus.ACTIVE) {
                 throw new CustomerChannelAccessDeniedException();
@@ -108,6 +122,26 @@ public class CustomerChannelService {
         });
     }
 
+    private Customer materializeCustomer(BusinessId businessId, UUID customerId,
+            InviteCustomerData customerData) {
+        if (customerData == null) {
+            throw new CustomerChannelAccessDeniedException();
+        }
+        var now = Instant.now(clock);
+        var customer = new Customer(customerId, businessId, customerData.name(), null,
+                customerData.phone(), CustomerStatus.ACTIVE, now, now);
+        customers.insert(customer);
+        return customer;
+    }
+
+    private static InviteCustomerData prepareInviteCustomerData(InviteCustomerData value) {
+        if (value == null) return null;
+        if (value.name() == null || value.name().isBlank() || value.name().length() > 200) {
+            throw new IllegalArgumentException("customer name is required and must be at most 200 characters");
+        }
+        return new InviteCustomerData(value.name().trim(), normalizeInvitePhone(value.phone()));
+    }
+
     private static String normalizeInvitePhone(String phone) {
         if (phone == null || phone.isBlank()) throw new CustomerInvitePhoneMissingException();
         var digits = phone.replaceAll("[^0-9]", "");
@@ -132,9 +166,12 @@ public class CustomerChannelService {
         return "+" + digits;
     }
 
-    private static String inviteFingerprint(BusinessId businessId, UUID customerId) {
+    private static String inviteFingerprint(BusinessId businessId, UUID customerId,
+            InviteCustomerData customerData) {
+        var dataSuffix = customerData == null ? ""
+                : "\u0000" + customerData.name() + "\u0000" + customerData.phone();
         return CustomerChannelToken.hash(INVITE_OPERATION + "\u0000" + businessId.value()
-                + "\u0000" + customerId);
+                + "\u0000" + customerId + dataSuffix);
     }
 
     private static String deliveryKey(BusinessId businessId, UUID channelId, String idempotencyKey) {
@@ -156,6 +193,8 @@ public class CustomerChannelService {
             throw new IllegalArgumentException("Idempotency-Key is required and must be at most 200 characters");
         }
     }
+
+    public record InviteCustomerData(String name, String phone) {}
 
     @Transactional
     public ActivationResult activate(String token) {

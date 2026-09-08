@@ -58,6 +58,27 @@ class CustomerChannelServiceTest {
     }
 
     @Test
+    void missingBackendCustomerIsMaterializedFromInviteData() {
+        var repository = new MemoryChannels();
+        var delivery = new RecordingDelivery();
+        var customerRepository = customerRepository();
+        var service = service(authorize(BUSINESS_ID), customerRepository,
+                repository, delivery, Clock.fixed(NOW, ZoneOffset.UTC));
+
+        var invite = service.invite(UUID.randomUUID(), BUSINESS_ID, CUSTOMER_ID, "materialize",
+                new CustomerChannelService.InviteCustomerData("  João da Silva  ", "(86) 99592-2924"));
+
+        assertThat(invite.status()).isEqualTo("INVITED");
+        assertThat(delivery.items.get(0).phone()).isEqualTo("+5586995922924");
+        assertThat(customerRepository.find(BUSINESS_ID, CUSTOMER_ID)).get()
+                .satisfies(customer -> {
+                    assertThat(customer.name()).isEqualTo("João da Silva");
+                    assertThat(customer.phone()).isEqualTo("+5586995922924");
+                    assertThat(customer.status()).isEqualTo(CustomerStatus.ACTIVE);
+                });
+    }
+
+    @Test
     void sameKeyReplaysOriginalResultWithoutCreatingOrRevokingAnotherInvite() {
         var repository = new MemoryChannels();
         var delivery = new RecordingDelivery();
@@ -268,7 +289,7 @@ class CustomerChannelServiceTest {
                         .toList();
             }
 
-            @Override public void insert(Customer value) { throw unsupported(); }
+            @Override public void insert(Customer value) { customers.put(value.id(), value); }
             @Override public void update(Customer value) { throw unsupported(); }
             @Override public void deleteUnclaimed(Customer value) { throw unsupported(); }
             @Override public Optional<CustomerRepository.IdempotencyRecord> findIdempotency(

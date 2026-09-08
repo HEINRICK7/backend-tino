@@ -6,6 +6,7 @@ import com.tino.backend.customerchannel.application.exception.CustomerInviteInva
 import com.tino.backend.customerchannel.application.exception.CustomerInvitePhoneMissingException;
 import com.tino.backend.customerchannel.application.exception.CustomerInvitePhoneInvalidException;
 import com.tino.backend.customerchannel.application.exception.CustomerSessionRequiredException;
+import com.tino.backend.business.application.port.in.BusinessAuthorizationDeniedException;
 import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +23,11 @@ public final class CustomerChannelApiExceptionHandler {
     @ExceptionHandler(CustomerChannelAccessDeniedException.class)
     ResponseEntity<ErrorResponse> forbidden(RuntimeException exception) {
         return response(HttpStatus.FORBIDDEN, "CHANNEL_INACTIVE", "customer channel is not active");
+    }
+
+    @ExceptionHandler(BusinessAuthorizationDeniedException.class)
+    ResponseEntity<ErrorResponse> businessForbidden(RuntimeException exception) {
+        return response(HttpStatus.FORBIDDEN, "BUSINESS_ACCESS_DENIED", "business access denied");
     }
 
     @ExceptionHandler(CustomerInviteInvalidException.class)
