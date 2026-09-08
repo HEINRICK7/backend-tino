@@ -38,7 +38,8 @@ class M29CustomerChannelPostgresTest {
                 .migrate();
         try (var connection = migratorConnection(); var statement = connection.createStatement()) {
             statement.execute("TRUNCATE TABLE public.customer_sessions, public.customer_invites, "
-                    + "public.customer_channels, public.customers, public.businesses CASCADE");
+                    + "public.customer_channel_activation_idempotency, public.customer_channels, "
+                    + "public.customers, public.businesses CASCADE");
         }
     }
 
@@ -54,6 +55,17 @@ class M29CustomerChannelPostgresTest {
             assertThat(invite.businessId()).isEqualTo(new BusinessId(BUSINESS_ID));
             assertThat(repository.findActiveSession(CustomerChannelToken.hash("b".repeat(32)), NOW))
                     .isPresent();
+
+            var key = "m29-activation";
+            var fingerprint = CustomerChannelToken.hash("a".repeat(32));
+            assertThat(repository.claimActivationIdempotency("CUSTOMER_CHANNEL_ACTIVATION", key,
+                    fingerprint, NOW)).isTrue();
+            assertThat(repository.findActivationIdempotency("CUSTOMER_CHANNEL_ACTIVATION", key))
+                    .get().extracting(record -> record.requestFingerprint()).isEqualTo(fingerprint);
+            repository.completeActivationIdempotency("CUSTOMER_CHANNEL_ACTIVATION", key,
+                    new BusinessId(BUSINESS_ID), CHANNEL_ID, CUSTOMER_ID, SESSION_ID, NOW);
+            assertThat(repository.findActivationIdempotency("CUSTOMER_CHANNEL_ACTIVATION", key))
+                    .get().extracting(record -> record.sessionId()).isEqualTo(SESSION_ID);
         }
     }
 

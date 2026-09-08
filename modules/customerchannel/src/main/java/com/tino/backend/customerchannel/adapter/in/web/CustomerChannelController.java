@@ -62,9 +62,11 @@ public final class CustomerChannelController {
 
     @PostMapping("/customer-channel/activation")
     public ResponseEntity<CustomerChannelViews.ActivationResponse> activate(
-            @RequestBody(required = false) ActivationRequest request, HttpServletResponse response) {
+            @RequestBody(required = false) ActivationRequest request,
+            @RequestHeader(name = "Idempotency-Key", required = true) String idempotencyKey,
+            HttpServletResponse response) {
         if (request == null || request.token() == null) throw new IllegalArgumentException("token is required");
-        var result = channels.activate(request.token());
+        var result = channels.activate(request.token(), idempotencyKey);
         var cookie = ResponseCookie.from(cookieName, result.sessionToken())
                 .httpOnly(true).secure(secureCookie).sameSite("Lax").path("/")
                 .maxAge(Duration.ofDays(30)).build();

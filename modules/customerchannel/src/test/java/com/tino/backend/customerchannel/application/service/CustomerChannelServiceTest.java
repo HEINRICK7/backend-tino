@@ -179,7 +179,7 @@ class CustomerChannelServiceTest {
                 repository, delivery, Clock.fixed(NOW, ZoneOffset.UTC));
         service.invite(UUID.randomUUID(), BUSINESS_ID, CUSTOMER_ID, "activation");
 
-        var activation = service.activate(delivery.items.get(0).token());
+        var activation = service.activate(delivery.items.get(0).token(), "activation-key");
 
         assertThat(activation.sessionToken()).isNotBlank();
         assertThat(repository.consumed).hasSize(1);
@@ -187,7 +187,11 @@ class CustomerChannelServiceTest {
         assertThat(repository.session.customerId()).isEqualTo(CUSTOMER_ID);
         assertThat(repository.session.businessId()).isEqualTo(BUSINESS_ID);
         assertThat(repository.sessionTokenHash).isEqualTo(CustomerChannelToken.hash(activation.sessionToken()));
-        assertThatThrownBy(() -> service.activate(delivery.items.get(0).token()))
+        var retry = service.activate(delivery.items.get(0).token(), "activation-key");
+
+        assertThat(retry.sessionToken()).isNotEqualTo(activation.sessionToken());
+        assertThat(repository.sessionTokenHash).isEqualTo(CustomerChannelToken.hash(retry.sessionToken()));
+        assertThatThrownBy(() -> service.activate(delivery.items.get(0).token(), "another-key"))
                 .isInstanceOf(CustomerInviteInvalidException.class);
     }
 
@@ -203,7 +207,7 @@ class CustomerChannelServiceTest {
                 customer(CUSTOMER_ID, BUSINESS_ID, CustomerStatus.ACTIVE, "+5586995922924")),
                 repository, new RecordingDelivery(), Clock.fixed(NOW.plusSeconds(901), ZoneOffset.UTC));
 
-        assertThatThrownBy(() -> expiredService.activate(delivery.items.get(0).token()))
+        assertThatThrownBy(() -> expiredService.activate(delivery.items.get(0).token(), "expired-key"))
                 .isInstanceOf(CustomerInviteInvalidException.class);
     }
 
@@ -322,6 +326,7 @@ class CustomerChannelServiceTest {
         private final Map<UUID, InviteRecord> invites = new HashMap<>();
         private final Map<UUID, String> inviteTokenHashes = new HashMap<>();
         private final Map<String, InviteIdempotencyRecord> idempotencies = new HashMap<>();
+        private final Map<String, ActivationIdempotencyRecord> activationIdempotencies = new HashMap<>();
         private final Set<UUID> consumed = new HashSet<>();
         private final Set<UUID> revoked = new HashSet<>();
         private SessionRecord session;
@@ -368,6 +373,33 @@ class CustomerChannelServiceTest {
             if (current == null) throw new IllegalStateException("idempotency claim is missing");
             idempotencies.put(key, new InviteIdempotencyRecord(current.requestFingerprint(),
                     current.channelId(), responseStatus, deliveryStatus));
+        }
+
+        @Override
+        public Optional<ActivationIdempotencyRecord> findActivationIdempotency(String operation,
+                String idempotencyKey) {
+            return Optional.ofNullable(activationIdempotencies.get(operation + ":" + idempotencyKey));
+        }
+
+        @Override
+        public boolean claimActivationIdempotency(String operation, String idempotencyKey,
+                String requestFingerprint, Instant createdAt) {
+            var key = operation + ":" + idempotencyKey;
+            if (activationIdempotencies.containsKey(key)) return false;
+            activationIdempotencies.put(key, new ActivationIdempotencyRecord(requestFingerprint,
+                    null, null, null, null));
+            return true;
+        }
+
+        @Override
+        public void completeActivationIdempotency(String operation, String idempotencyKey,
+                BusinessId businessId, UUID channelId, UUID customerId, UUID sessionId,
+                Instant completedAt) {
+            var key = operation + ":" + idempotencyKey;
+            var current = activationIdempotencies.get(key);
+            if (current == null) throw new IllegalStateException("activation idempotency claim is missing");
+            activationIdempotencies.put(key, new ActivationIdempotencyRecord(
+                    current.requestFingerprint(), businessId, channelId, customerId, sessionId));
         }
 
         @Override

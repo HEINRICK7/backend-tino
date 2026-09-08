@@ -9,6 +9,7 @@ import com.tino.backend.customerchannel.application.port.in.CustomerChannelPrinc
 import com.tino.backend.customerchannel.application.port.out.CustomerChannelRepository;
 import com.tino.backend.customerchannel.application.port.out.CustomerInviteDeliveryPort;
 import com.tino.backend.customerchannel.application.exception.CustomerChannelAccessDeniedException;
+import com.tino.backend.customerchannel.application.exception.CustomerChannelActivationConflictException;
 import com.tino.backend.customerchannel.application.exception.CustomerChannelInviteConflictException;
 import com.tino.backend.customerchannel.application.exception.CustomerInviteInvalidException;
 import com.tino.backend.customerchannel.application.exception.CustomerInvitePhoneMissingException;
@@ -31,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 public class CustomerChannelService {
     private static final String INVITE_OPERATION = "CUSTOMER_CHANNEL_INVITE";
+    private static final String ACTIVATION_OPERATION = "CUSTOMER_CHANNEL_ACTIVATION";
     private static final String DELIVERY_KEY_PREFIX = "customer-channel-invite-";
     private static final Duration INVITE_TTL = Duration.ofMinutes(15);
     private static final Duration SESSION_TTL = Duration.ofDays(30);
@@ -197,16 +199,48 @@ public class CustomerChannelService {
     public record InviteCustomerData(String name, String phone) {}
 
     @Transactional
-    public ActivationResult activate(String token) {
+    public ActivationResult activate(String token, String idempotencyKey) {
         if (token == null || token.length() < 32 || token.length() > 256) throw new CustomerInviteInvalidException();
+        validateIdempotencyKey(idempotencyKey);
         var now = Instant.now(clock);
+        var requestFingerprint = CustomerChannelToken.hash(token);
+        if (!channels.claimActivationIdempotency(ACTIVATION_OPERATION, idempotencyKey,
+                requestFingerprint, now)) {
+            var existing = channels.findActivationIdempotency(ACTIVATION_OPERATION, idempotencyKey)
+                    .orElseThrow(CustomerChannelActivationConflictException::new);
+            if (!requestFingerprint.equals(existing.requestFingerprint())
+                    || existing.businessId() == null || existing.channelId() == null
+                    || existing.customerId() == null || existing.sessionId() == null) {
+                throw new CustomerChannelActivationConflictException();
+            }
+            return replayActivation(existing, idempotencyKey, now);
+        }
+
         var invite = channels.findValidInvite(CustomerChannelToken.hash(token), now)
                 .orElseThrow(CustomerInviteInvalidException::new);
         var sessionToken = CustomerChannelToken.random();
+        var sessionId = ids.next();
         tenants.execute(invite.businessId(), () -> {
             channels.consumeInvite(invite.id(), now);
-            channels.insertSession(ids.next(), invite.channelId(), invite.businessId(), invite.customerId(),
+            channels.insertSession(sessionId, invite.channelId(), invite.businessId(), invite.customerId(),
                     CustomerChannelToken.hash(sessionToken), now, now.plus(SESSION_TTL));
+            channels.completeActivationIdempotency(ACTIVATION_OPERATION, idempotencyKey,
+                    invite.businessId(), invite.channelId(), invite.customerId(), sessionId, now);
+            return null;
+        });
+        return new ActivationResult(sessionToken);
+    }
+
+    private ActivationResult replayActivation(CustomerChannelRepository.ActivationIdempotencyRecord record,
+            String idempotencyKey, Instant now) {
+        var sessionToken = CustomerChannelToken.random();
+        var sessionId = ids.next();
+        tenants.execute(record.businessId(), () -> {
+            channels.revokeSession(record.sessionId(), now);
+            channels.insertSession(sessionId, record.channelId(), record.businessId(), record.customerId(),
+                    CustomerChannelToken.hash(sessionToken), now, now.plus(SESSION_TTL));
+            channels.completeActivationIdempotency(ACTIVATION_OPERATION, idempotencyKey,
+                    record.businessId(), record.channelId(), record.customerId(), sessionId, now);
             return null;
         });
         return new ActivationResult(sessionToken);

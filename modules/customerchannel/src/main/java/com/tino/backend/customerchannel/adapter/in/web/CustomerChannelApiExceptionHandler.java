@@ -1,6 +1,7 @@
 package com.tino.backend.customerchannel.adapter.in.web;
 
 import com.tino.backend.customerchannel.application.exception.CustomerChannelAccessDeniedException;
+import com.tino.backend.customerchannel.application.exception.CustomerChannelActivationConflictException;
 import com.tino.backend.customerchannel.application.exception.CustomerChannelInviteConflictException;
 import com.tino.backend.customerchannel.application.exception.CustomerInviteInvalidException;
 import com.tino.backend.customerchannel.application.exception.CustomerInvitePhoneMissingException;
@@ -49,6 +50,12 @@ public final class CustomerChannelApiExceptionHandler {
     ResponseEntity<ErrorResponse> idempotencyConflict(RuntimeException exception) {
         return response(HttpStatus.CONFLICT, "INVITE_IDEMPOTENCY_CONFLICT",
                 "Idempotency-Key was already used for another customer-channel invite");
+    }
+
+    @ExceptionHandler(CustomerChannelActivationConflictException.class)
+    ResponseEntity<ErrorResponse> activationIdempotencyConflict(RuntimeException exception) {
+        return response(HttpStatus.CONFLICT, "ACTIVATION_IDEMPOTENCY_CONFLICT",
+                "Idempotency-Key was already used for another customer-channel activation");
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

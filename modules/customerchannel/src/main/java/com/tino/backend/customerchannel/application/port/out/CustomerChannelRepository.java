@@ -22,6 +22,16 @@ public interface CustomerChannelRepository {
     void completeInviteIdempotency(BusinessId businessId, String operation, String idempotencyKey,
             String responseStatus, String deliveryStatus);
 
+    Optional<ActivationIdempotencyRecord> findActivationIdempotency(String operation,
+            String idempotencyKey);
+
+    boolean claimActivationIdempotency(String operation, String idempotencyKey,
+            String requestFingerprint, Instant createdAt);
+
+    void completeActivationIdempotency(String operation, String idempotencyKey,
+            BusinessId businessId, UUID channelId, UUID customerId, UUID sessionId,
+            Instant completedAt);
+
     void revokeOpenInvites(BusinessId businessId, UUID channelId, Instant now);
 
     void insertInvite(UUID id, BusinessId businessId, UUID channelId, String tokenHash,
@@ -55,6 +65,9 @@ public interface CustomerChannelRepository {
 
     record InviteIdempotencyRecord(String requestFingerprint, UUID channelId,
             String responseStatus, String deliveryStatus) {}
+
+    record ActivationIdempotencyRecord(String requestFingerprint, BusinessId businessId,
+            UUID channelId, UUID customerId, UUID sessionId) {}
 
     record SessionRecord(UUID id, UUID channelId, BusinessId businessId, UUID customerId,
             Instant expiresAt) {}

@@ -91,6 +91,52 @@ public class JooqCustomerChannelRepository implements CustomerChannelRepository 
     }
 
     @Override
+    public Optional<ActivationIdempotencyRecord> findActivationIdempotency(String operation,
+            String idempotencyKey) {
+        var row = dsl.fetchOne("""
+                SELECT request_fingerprint, business_id, customer_channel_id, customer_id, session_id
+                  FROM public.customer_channel_activation_idempotency
+                 WHERE operation = ? AND idempotency_key = ?
+                 FOR UPDATE
+                """, operation, idempotencyKey);
+        if (row == null) return Optional.empty();
+        var businessId = row.get("business_id", UUID.class);
+        return Optional.of(new ActivationIdempotencyRecord(
+                row.get("request_fingerprint", String.class),
+                businessId == null ? null : new BusinessId(businessId),
+                row.get("customer_channel_id", UUID.class),
+                row.get("customer_id", UUID.class),
+                row.get("session_id", UUID.class)));
+    }
+
+    @Override
+    public boolean claimActivationIdempotency(String operation, String idempotencyKey,
+            String requestFingerprint, Instant createdAt) {
+        return dsl.execute("""
+                INSERT INTO public.customer_channel_activation_idempotency
+                    (operation, idempotency_key, request_fingerprint, created_at)
+                VALUES (?, ?, ?, CAST(? AS TIMESTAMPTZ))
+                ON CONFLICT (operation, idempotency_key) DO NOTHING
+                """, operation, idempotencyKey, requestFingerprint, time(createdAt)) == 1;
+    }
+
+    @Override
+    public void completeActivationIdempotency(String operation, String idempotencyKey,
+            BusinessId businessId, UUID channelId, UUID customerId, UUID sessionId,
+            Instant completedAt) {
+        var updated = dsl.execute("""
+                UPDATE public.customer_channel_activation_idempotency
+                   SET business_id = ?, customer_channel_id = ?, customer_id = ?, session_id = ?,
+                       completed_at = CAST(? AS TIMESTAMPTZ)
+                 WHERE operation = ? AND idempotency_key = ?
+                """, businessId.value(), channelId, customerId, sessionId, time(completedAt),
+                operation, idempotencyKey);
+        if (updated != 1) {
+            throw new IllegalStateException("customer-channel activation idempotency claim is missing");
+        }
+    }
+
+    @Override
     public void revokeOpenInvites(BusinessId businessId, UUID channelId, Instant now) {
         dsl.execute("""
                 UPDATE public.customer_invites
