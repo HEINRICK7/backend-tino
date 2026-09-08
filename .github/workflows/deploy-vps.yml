@@ -44,6 +44,47 @@ jobs:
           set +a
           ./gradlew clean build architecture --no-daemon
 
+  pwa:
+    needs: gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout Meu TINO PWA
+        uses: actions/checkout@v4
+        with:
+          repository: HEINRICK7/meu-tino
+          ref: main
+          path: meu-tino-pwa
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: meu-tino-pwa/package-lock.json
+
+      - name: Install PWA dependencies
+        working-directory: meu-tino-pwa
+        run: npm ci
+
+      - name: Verify PWA
+        working-directory: meu-tino-pwa
+        run: |
+          npm run format:check
+          npm test
+          npm run typecheck
+
+      - name: Build PWA
+        working-directory: meu-tino-pwa
+        run: npm run build
+
+      - name: Upload PWA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tino-pwa-dist
+          path: meu-tino-pwa/dist
+          if-no-files-found: error
+
   publish:
     needs: gates
     runs-on: ubuntu-latest
@@ -109,12 +150,17 @@ jobs:
           cache-to: type=gha,mode=max
 
   deploy:
-    needs: publish
+    needs: [publish, pwa]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: tino-vps
     steps:
       - uses: actions/checkout@v4
+      - name: Download PWA artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tino-pwa-dist
+          path: pwa-dist
       - name: Install SSH material
         env:
           VPS_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -162,6 +208,8 @@ jobs:
           retry_scp docker/postgres/init.sh "$VPS_USER@$VPS_HOST:/opt/tino/init.sh"
           retry_scp deploy/nginx/tino-http.conf "$VPS_USER@$VPS_HOST:/opt/tino/tino-http.conf"
           retry_scp deploy/nginx/tino.conf "$VPS_USER@$VPS_HOST:/opt/tino/tino.conf"
+          retry_scp deploy/nginx/tino-pwa-http.conf "$VPS_USER@$VPS_HOST:/opt/tino/tino-pwa-http.conf"
+          retry_scp deploy/nginx/tino-pwa.conf "$VPS_USER@$VPS_HOST:/opt/tino/tino-pwa.conf"
       - name: Deploy without stopping other Compose projects
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
@@ -173,6 +221,7 @@ jobs:
           TINO_IMAGE: ${{ needs.publish.outputs.image }}
           TINO_KEYCLOAK_IMAGE: ${{ needs.publish.outputs.keycloak_image }}
           TINO_DELIVERY_IMAGE: ${{ needs.publish.outputs.delivery_image }}
+          TINO_PWA_HOST: app.tino.otimizanegocio.com
         run: |
           set -euo pipefail
           test -n "$TINO_ENV_FILE"
@@ -188,6 +237,18 @@ jobs:
             done
             return 1
           }
+          retry_scp() {
+            local attempt
+            for attempt in 1 2 3; do
+              if scp "${SSH_OPTS[@]}" "$@"; then
+                return 0
+              fi
+              test "$attempt" -lt 3 && sleep $((attempt * 3))
+            done
+            return 1
+          }
+          tar -C pwa-dist -czf "$RUNNER_TEMP/tino-pwa.tar.gz" .
+          retry_scp "$RUNNER_TEMP/tino-pwa.tar.gz" "$VPS_USER@$VPS_HOST:/opt/tino-pwa-${GITHUB_SHA}.tar.gz"
           printf '%s\n' "$TINO_ENV_FILE" \
             | sed '/^TINO_WHATSAPP_DELIVERY_ENABLED=/d' \
             | { cat; printf 'TINO_WHATSAPP_DELIVERY_ENABLED=%s\n' "$TINO_WHATSAPP_DELIVERY_ENABLED"; } \
@@ -202,12 +263,20 @@ jobs:
             sed -i '/^TINO_WHATSAPP_DELIVERY_INTERNAL_TOKEN=/d' "$env_file"
             printf 'TINO_WHATSAPP_DELIVERY_INTERNAL_TOKEN=%s\n' "$otp_delivery_token" >> "$env_file"
           fi
+          customer_channel_base="$(sed -n 's/^TINO_CUSTOMER_CHANNEL_PUBLIC_BASE_URL=//p' "$env_file" | head -n 1)"
+          if test -z "$customer_channel_base"; then
+            printf 'TINO_CUSTOMER_CHANNEL_PUBLIC_BASE_URL=https://%s\n' "$TINO_PWA_HOST" >> "$env_file"
+          fi
+          session_secure="$(sed -n 's/^TINO_CUSTOMER_CHANNEL_SESSION_SECURE=//p' "$env_file" | head -n 1)"
+          if test -z "$session_secure"; then
+            printf 'TINO_CUSTOMER_CHANNEL_SESSION_SECURE=true\n' >> "$env_file"
+          fi
           REMOTE_ENV
           printf '%s' "$GHCR_TOKEN" | retry_ssh "$VPS_USER@$VPS_HOST" "docker login ghcr.io --username '$GHCR_USER' --password-stdin"
           retry_ssh "$VPS_USER@$VPS_HOST" \
             "TINO_IMAGE='$TINO_IMAGE' TINO_KEYCLOAK_IMAGE='$TINO_KEYCLOAK_IMAGE' TINO_DELIVERY_IMAGE='$TINO_DELIVERY_IMAGE' docker compose --env-file /opt/tino/.env.next -f /opt/tino/compose.vps.yaml config --quiet"
           if ! ssh "${SSH_OPTS[@]}" "$VPS_USER@$VPS_HOST" \
-            "TINO_IMAGE='$TINO_IMAGE' TINO_KEYCLOAK_IMAGE='$TINO_KEYCLOAK_IMAGE' TINO_DELIVERY_IMAGE='$TINO_DELIVERY_IMAGE' /bin/sh -s" <<'REMOTE'
+            "TINO_IMAGE='$TINO_IMAGE' TINO_KEYCLOAK_IMAGE='$TINO_KEYCLOAK_IMAGE' TINO_DELIVERY_IMAGE='$TINO_DELIVERY_IMAGE' TINO_PWA_HOST='$TINO_PWA_HOST' /bin/sh -s" <<'REMOTE'
           set -eu
           cd /opt/tino
           staged_env=/opt/tino/.env.next
@@ -268,6 +337,54 @@ jobs:
               exit 20
             }
           done
+          pwa_resolved="$(getent ahostsv4 "$TINO_PWA_HOST" | awk 'NR == 1 {print $1}')"
+          test "$pwa_resolved" = "$TINO_VPS_IPV4" || {
+            echo "DNS $TINO_PWA_HOST does not resolve to the configured VPS address" >&2
+            exit 32
+          }
+          customer_channel_base="$(dotenv_value TINO_CUSTOMER_CHANNEL_PUBLIC_BASE_URL)"
+          case "$customer_channel_base" in
+            https://*) ;;
+            *)
+              echo 'Production deployment requires an HTTPS TINO_CUSTOMER_CHANNEL_PUBLIC_BASE_URL' >&2
+              exit 33
+              ;;
+          esac
+          session_secure="$(dotenv_value TINO_CUSTOMER_CHANNEL_SESSION_SECURE)"
+          test "$session_secure" = "true" || {
+            echo 'Production deployment requires TINO_CUSTOMER_CHANNEL_SESSION_SECURE=true' >&2
+            exit 34
+          }
+          pwa_nginx_config=/etc/nginx/sites-available/tino-pwa.conf
+          pwa_nginx_link=/etc/nginx/sites-enabled/tino-pwa.conf
+          if test -e "$pwa_nginx_config" && ! grep -q 'managed by TINO PWA deployment' "$pwa_nginx_config"; then
+            echo "Refusing to overwrite an unrelated Nginx configuration: $pwa_nginx_config" >&2
+            exit 35
+          fi
+          if test -e "$pwa_nginx_link" && ! test -L "$pwa_nginx_link"; then
+            echo "Refusing to overwrite an unrelated Nginx site entry: $pwa_nginx_link" >&2
+            exit 36
+          fi
+          pwa_release=/opt/tino-pwa/releases/$GITHUB_SHA
+          install -d -m 755 "$pwa_release" /opt/tino-pwa/releases
+          tar -xzf "/opt/tino-pwa-$GITHUB_SHA.tar.gz" -C "$pwa_release"
+          rm -f "/opt/tino-pwa-$GITHUB_SHA.tar.gz"
+          ln -sfn "$pwa_release" /opt/tino-pwa/current
+          install -d -m 755 /var/www/tino-pwa-acme
+          sed -e "s/__TINO_PWA_HOST__/$TINO_PWA_HOST/g" \
+            /opt/tino/tino-pwa-http.conf > "$pwa_nginx_config"
+          ln -sfn "$pwa_nginx_config" "$pwa_nginx_link"
+          nginx -t
+          systemctl reload nginx
+          certbot certonly --webroot -w /var/www/tino-pwa-acme \
+            --cert-name tino-pwa \
+            -d "$TINO_PWA_HOST" \
+            --non-interactive --agree-tos --keep-until-expiring \
+            --email "$TINO_LETSENCRYPT_EMAIL"
+          sed -e "s/__TINO_PWA_HOST__/$TINO_PWA_HOST/g" \
+            /opt/tino/tino-pwa.conf > "$pwa_nginx_config"
+          nginx -t
+          systemctl reload nginx
           nginx_config=/etc/nginx/sites-available/tino-backend.conf
           nginx_link=/etc/nginx/sites-enabled/tino-backend.conf
           if test -e "$nginx_config" && ! grep -q 'managed by TINO deployment' "$nginx_config"; then
@@ -327,15 +444,26 @@ jobs:
           nginx -t
           systemctl reload nginx
           compose ps
+          readiness_ok=false
           for attempt in $(seq 1 30); do
             if curl --fail --silent --show-error "https://$TINO_API_HOST/actuator/health/readiness" >/dev/null; then
-              exit 0
+              readiness_ok=true
+              break
             fi
             sleep 5
           done
-          echo 'TINO readiness check failed' >&2
-          compose ps
-          exit 22
+          test "$readiness_ok" = true || {
+            echo 'TINO readiness check failed' >&2
+            compose ps
+            exit 22
+          }
+          pwa_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "https://$TINO_PWA_HOST/api/v1/me")"
+          test "$pwa_status" = 401 || test "$pwa_status" = 403 || {
+            echo "TINO PWA API proxy returned unexpected HTTP status $pwa_status" >&2
+            exit 37
+          }
+          curl --fail --silent --show-error "https://$TINO_PWA_HOST/" >/dev/null
+          curl --fail --silent --show-error "https://$TINO_PWA_HOST/manifest.webmanifest" >/dev/null
           REMOTE
           then
             echo 'Remote TINO deployment failed' >&2

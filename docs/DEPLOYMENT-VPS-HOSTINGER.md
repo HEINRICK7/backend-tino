@@ -54,10 +54,15 @@ Recommended hostnames:
 ```text
 api.tino.otimizanegocio.com  A  187.77.240.172
 auth.tino.otimizanegocio.com A  187.77.240.172
+app.tino.otimizanegocio.com  A  187.77.240.172
 ```
 
+The `app` host serves the Meu TINO PWA and proxies only `/api/` to the private
+TINO application port. The PWA is deployed atomically under `/opt/tino-pwa`
+by the same workflow; it does not create a Docker project or claim a port.
+
 Before the first deploy, confirm that these names resolve to the VPS. Do not
-replace the root zone or existing records; add only the two new `A` records.
+replace the root zone or existing records; add only the missing TINO `A` record.
 
 ## GitHub environment
 
@@ -109,6 +114,8 @@ TINO_WHATSAPP_DELIVERY_PROVIDER=WA_EVOLUTION
 # This must match the delivery service's internal token. Keep it private.
 TINO_WHATSAPP_DELIVERY_INTERNAL_TOKEN=same-value-as-TINO_OTP_DELIVERY_INTERNAL_TOKEN
 TINO_WHATSAPP_DELIVERY_TIMEOUT=PT10S
+TINO_CUSTOMER_CHANNEL_PUBLIC_BASE_URL=https://app.tino.otimizanegocio.com
+TINO_CUSTOMER_CHANNEL_SESSION_SECURE=true
 WA_EVOLUTION_BASE_URL=http://evolution-api:8080
 WA_EVOLUTION_API_KEY=secret-from-evolution
 WA_EVOLUTION_INSTANCE=tino
