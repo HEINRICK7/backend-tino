@@ -478,17 +478,9 @@ jobs:
           if test "$activation_status" != 410; then
             echo "TINO customer-channel activation returned unexpected HTTP status $activation_status for an invalid token" >&2
             echo 'Recent customer-channel backend diagnostics:' >&2
-            compose logs --no-color --tail=260 app 2>&1 | tail -n 260 >&2 || true
-            echo 'Customer-channel database object diagnostics:' >&2
-            compose exec -T postgres psql -U tino_admin -d tino -Atc \
-              "SELECT current_database(), to_regclass('public.customer_invites'), to_regclass('public.customer_channels'), to_regclass('public.customer_sessions');" \
-              >&2 || true
-            compose exec -T postgres psql -U tino_admin -d tino -c \
-              "SELECT version, success FROM public.flyway_schema_history WHERE version IN ('29', '30') ORDER BY version;" \
-              >&2 || true
-            compose exec -T postgres psql -U tino_admin -d tino -c \
-              "SELECT grantee, privilege_type FROM information_schema.role_table_grants WHERE table_schema = 'public' AND table_name = 'customer_invites' ORDER BY grantee, privilege_type;" \
-              >&2 || true
+            compose logs --no-color --tail=160 app 2>&1 \
+              | grep -Ei 'customer.?channel|exception|error|warn|sql|permission|denied|401|403|500' \
+              | tail -n 100 >&2 || true
             exit 38
           fi
           curl --fail --silent --show-error "https://$TINO_PWA_HOST/" >/dev/null
