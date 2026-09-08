@@ -253,7 +253,7 @@ jobs:
             | sed '/^TINO_WHATSAPP_DELIVERY_ENABLED=/d' \
             | { cat; printf 'TINO_WHATSAPP_DELIVERY_ENABLED=%s\n' "$TINO_WHATSAPP_DELIVERY_ENABLED"; } \
             | retry_ssh "$VPS_USER@$VPS_HOST" 'umask 077; cat > /opt/tino/.env.next'
-          retry_ssh "$VPS_USER@$VPS_HOST" '/bin/sh -s' <<'REMOTE_ENV'
+          retry_ssh "$VPS_USER@$VPS_HOST" "TINO_PWA_HOST='$TINO_PWA_HOST' /bin/sh -s" <<'REMOTE_ENV'
           set -eu
           env_file=/opt/tino/.env.next
           whatsapp_token="$(sed -n 's/^TINO_WHATSAPP_DELIVERY_INTERNAL_TOKEN=//p' "$env_file" | head -n 1)"
