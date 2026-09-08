@@ -190,7 +190,7 @@ jobs:
           printf '%s' "$GHCR_TOKEN" | retry_ssh "$VPS_USER@$VPS_HOST" "docker login ghcr.io --username '$GHCR_USER' --password-stdin"
           retry_ssh "$VPS_USER@$VPS_HOST" \
             "TINO_IMAGE='$TINO_IMAGE' TINO_KEYCLOAK_IMAGE='$TINO_KEYCLOAK_IMAGE' TINO_DELIVERY_IMAGE='$TINO_DELIVERY_IMAGE' docker compose --env-file /opt/tino/.env.next -f /opt/tino/compose.vps.yaml config --quiet"
-          if ! retry_ssh "$VPS_USER@$VPS_HOST" \
+          if ! ssh "${SSH_OPTS[@]}" "$VPS_USER@$VPS_HOST" \
             "TINO_IMAGE='$TINO_IMAGE' TINO_KEYCLOAK_IMAGE='$TINO_KEYCLOAK_IMAGE' TINO_DELIVERY_IMAGE='$TINO_DELIVERY_IMAGE' /bin/sh -s" <<'REMOTE'
           set -eu
           cd /opt/tino
