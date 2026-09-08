@@ -169,12 +169,14 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GHCR_USER: ${{ github.actor }}
           TINO_ENV_FILE: ${{ secrets.TINO_VPS_ENV }}
+          TINO_WHATSAPP_DELIVERY_ENABLED: ${{ secrets.TINO_WHATSAPP_DELIVERY_ENABLED }}
           TINO_IMAGE: ${{ needs.publish.outputs.image }}
           TINO_KEYCLOAK_IMAGE: ${{ needs.publish.outputs.keycloak_image }}
           TINO_DELIVERY_IMAGE: ${{ needs.publish.outputs.delivery_image }}
         run: |
           set -euo pipefail
           test -n "$TINO_ENV_FILE"
+          test "$TINO_WHATSAPP_DELIVERY_ENABLED" = "true"
           SSH_OPTS=(-4 -o BatchMode=yes -o ConnectTimeout=15 -o ConnectionAttempts=3 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 -i "$HOME/.ssh/tino_deploy")
           retry_ssh() {
             local attempt
@@ -186,7 +188,10 @@ jobs:
             done
             return 1
           }
-          printf '%s\n' "$TINO_ENV_FILE" | retry_ssh "$VPS_USER@$VPS_HOST" 'umask 077; cat > /opt/tino/.env.next'
+          printf '%s\n' "$TINO_ENV_FILE" \
+            | sed '/^TINO_WHATSAPP_DELIVERY_ENABLED=/d' \
+            | { cat; printf 'TINO_WHATSAPP_DELIVERY_ENABLED=%s\n' "$TINO_WHATSAPP_DELIVERY_ENABLED"; } \
+            | retry_ssh "$VPS_USER@$VPS_HOST" 'umask 077; cat > /opt/tino/.env.next'
           printf '%s' "$GHCR_TOKEN" | retry_ssh "$VPS_USER@$VPS_HOST" "docker login ghcr.io --username '$GHCR_USER' --password-stdin"
           retry_ssh "$VPS_USER@$VPS_HOST" \
             "TINO_IMAGE='$TINO_IMAGE' TINO_KEYCLOAK_IMAGE='$TINO_KEYCLOAK_IMAGE' TINO_DELIVERY_IMAGE='$TINO_DELIVERY_IMAGE' docker compose --env-file /opt/tino/.env.next -f /opt/tino/compose.vps.yaml config --quiet"
