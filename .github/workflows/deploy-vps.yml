@@ -192,6 +192,17 @@ jobs:
             | sed '/^TINO_WHATSAPP_DELIVERY_ENABLED=/d' \
             | { cat; printf 'TINO_WHATSAPP_DELIVERY_ENABLED=%s\n' "$TINO_WHATSAPP_DELIVERY_ENABLED"; } \
             | retry_ssh "$VPS_USER@$VPS_HOST" 'umask 077; cat > /opt/tino/.env.next'
+          retry_ssh "$VPS_USER@$VPS_HOST" '/bin/sh -s' <<'REMOTE_ENV'
+          set -eu
+          env_file=/opt/tino/.env.next
+          whatsapp_token="$(sed -n 's/^TINO_WHATSAPP_DELIVERY_INTERNAL_TOKEN=//p' "$env_file" | head -n 1)"
+          if test -z "$whatsapp_token"; then
+            otp_delivery_token="$(sed -n 's/^TINO_OTP_DELIVERY_INTERNAL_TOKEN=//p' "$env_file" | head -n 1)"
+            test -n "$otp_delivery_token"
+            sed -i '/^TINO_WHATSAPP_DELIVERY_INTERNAL_TOKEN=/d' "$env_file"
+            printf 'TINO_WHATSAPP_DELIVERY_INTERNAL_TOKEN=%s\n' "$otp_delivery_token" >> "$env_file"
+          fi
+          REMOTE_ENV
           printf '%s' "$GHCR_TOKEN" | retry_ssh "$VPS_USER@$VPS_HOST" "docker login ghcr.io --username '$GHCR_USER' --password-stdin"
           retry_ssh "$VPS_USER@$VPS_HOST" \
             "TINO_IMAGE='$TINO_IMAGE' TINO_KEYCLOAK_IMAGE='$TINO_KEYCLOAK_IMAGE' TINO_DELIVERY_IMAGE='$TINO_DELIVERY_IMAGE' docker compose --env-file /opt/tino/.env.next -f /opt/tino/compose.vps.yaml config --quiet"
