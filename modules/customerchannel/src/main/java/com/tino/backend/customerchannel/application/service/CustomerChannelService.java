@@ -13,7 +13,6 @@ import com.tino.backend.customerchannel.application.exception.CustomerInviteInva
 import com.tino.backend.customerchannel.application.exception.CustomerInvitePhoneMissingException;
 import com.tino.backend.customerchannel.application.exception.CustomerInvitePhoneInvalidException;
 import com.tino.backend.customerchannel.application.exception.CustomerSessionRequiredException;
-import com.tino.backend.identity.domain.model.PhoneNumber;
 import com.tino.backend.shared.kernel.BusinessId;
 import com.tino.backend.shared.kernel.TenantContextExecutor;
 import com.tino.backend.shared.kernel.UuidGenerator;
@@ -111,11 +110,26 @@ public class CustomerChannelService {
 
     private static String normalizeInvitePhone(String phone) {
         if (phone == null || phone.isBlank()) throw new CustomerInvitePhoneMissingException();
-        try {
-            return PhoneNumber.normalize(phone).e164();
-        } catch (IllegalArgumentException exception) {
+        var digits = phone.replaceAll("[^0-9]", "");
+        if (digits.startsWith("00")) {
+            digits = digits.substring(2);
+        }
+        if (digits.startsWith("0") && (digits.length() == 11 || digits.length() == 12)) {
+            digits = digits.substring(1);
+        }
+        if (digits.startsWith("55")) {
+            if (digits.length() == 12 && digits.charAt(4) >= '6') {
+                digits = digits.substring(0, 4) + "9" + digits.substring(4);
+            }
+        } else if (digits.length() == 10 || digits.length() == 11) {
+            digits = "55" + digits;
+        } else {
             throw new CustomerInvitePhoneInvalidException();
         }
+        if (!digits.matches("55[1-9][0-9](9[0-9]{8}|[2-5][0-9]{7})")) {
+            throw new CustomerInvitePhoneInvalidException();
+        }
+        return "+" + digits;
     }
 
     private static String inviteFingerprint(BusinessId businessId, UUID customerId) {
