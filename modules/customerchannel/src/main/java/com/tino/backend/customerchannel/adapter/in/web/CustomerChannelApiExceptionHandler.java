@@ -1,8 +1,10 @@
 package com.tino.backend.customerchannel.adapter.in.web;
 
 import com.tino.backend.customerchannel.application.exception.CustomerChannelAccessDeniedException;
+import com.tino.backend.customerchannel.application.exception.CustomerChannelInviteConflictException;
 import com.tino.backend.customerchannel.application.exception.CustomerInviteInvalidException;
 import com.tino.backend.customerchannel.application.exception.CustomerInvitePhoneMissingException;
+import com.tino.backend.customerchannel.application.exception.CustomerInvitePhoneInvalidException;
 import com.tino.backend.customerchannel.application.exception.CustomerSessionRequiredException;
 import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
@@ -30,6 +32,17 @@ public final class CustomerChannelApiExceptionHandler {
     @ExceptionHandler(CustomerInvitePhoneMissingException.class)
     ResponseEntity<ErrorResponse> phoneMissing(RuntimeException exception) {
         return response(HttpStatus.BAD_REQUEST, "INVITE_PHONE_REQUIRED", "customer phone is required");
+    }
+
+    @ExceptionHandler(CustomerInvitePhoneInvalidException.class)
+    ResponseEntity<ErrorResponse> phoneInvalid(RuntimeException exception) {
+        return response(HttpStatus.BAD_REQUEST, "INVITE_PHONE_INVALID", "customer phone is invalid");
+    }
+
+    @ExceptionHandler(CustomerChannelInviteConflictException.class)
+    ResponseEntity<ErrorResponse> idempotencyConflict(RuntimeException exception) {
+        return response(HttpStatus.CONFLICT, "INVITE_IDEMPOTENCY_CONFLICT",
+                "Idempotency-Key was already used for another customer-channel invite");
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

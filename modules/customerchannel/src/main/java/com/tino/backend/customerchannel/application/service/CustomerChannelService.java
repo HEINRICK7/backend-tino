@@ -8,9 +8,12 @@ import com.tino.backend.customerchannel.application.port.in.CustomerChannelPrinc
 import com.tino.backend.customerchannel.application.port.out.CustomerChannelRepository;
 import com.tino.backend.customerchannel.application.port.out.CustomerInviteDeliveryPort;
 import com.tino.backend.customerchannel.application.exception.CustomerChannelAccessDeniedException;
+import com.tino.backend.customerchannel.application.exception.CustomerChannelInviteConflictException;
 import com.tino.backend.customerchannel.application.exception.CustomerInviteInvalidException;
 import com.tino.backend.customerchannel.application.exception.CustomerInvitePhoneMissingException;
+import com.tino.backend.customerchannel.application.exception.CustomerInvitePhoneInvalidException;
 import com.tino.backend.customerchannel.application.exception.CustomerSessionRequiredException;
+import com.tino.backend.identity.domain.model.PhoneNumber;
 import com.tino.backend.shared.kernel.BusinessId;
 import com.tino.backend.shared.kernel.TenantContextExecutor;
 import com.tino.backend.shared.kernel.UuidGenerator;
@@ -21,11 +24,14 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 
 public class CustomerChannelService {
+    private static final String INVITE_OPERATION = "CUSTOMER_CHANNEL_INVITE";
+    private static final String DELIVERY_KEY_PREFIX = "customer-channel-invite-";
     private static final Duration INVITE_TTL = Duration.ofMinutes(15);
     private static final Duration SESSION_TTL = Duration.ofDays(30);
 
@@ -54,14 +60,36 @@ public class CustomerChannelService {
 
     @Transactional
     public InviteResult invite(UUID userId, BusinessId businessId, UUID customerId, String idempotencyKey) {
+        validateIdempotencyKey(idempotencyKey);
+        Objects.requireNonNull(businessId, "businessId");
+        Objects.requireNonNull(customerId, "customerId");
         return authorization.execute(userId, businessId, authorizedBusiness -> {
+            var fingerprint = inviteFingerprint(authorizedBusiness, customerId);
+            var existing = channels.findInviteIdempotency(authorizedBusiness, INVITE_OPERATION, idempotencyKey);
+            if (existing.isPresent()) {
+                return replayInvite(existing.orElseThrow(), fingerprint);
+            }
+
             var customer = customers.find(authorizedBusiness, customerId)
                     .orElseThrow(CustomerChannelAccessDeniedException::new);
-            if (customer.status() != CustomerStatus.ACTIVE) throw new CustomerChannelAccessDeniedException();
-            if (customer.phone() == null || customer.phone().isBlank()) throw new CustomerInvitePhoneMissingException();
+            if (!authorizedBusiness.equals(customer.businessId()) || !customerId.equals(customer.id())
+                    || customer.status() != CustomerStatus.ACTIVE) {
+                throw new CustomerChannelAccessDeniedException();
+            }
+            var phone = normalizeInvitePhone(customer.phone());
 
             var now = Instant.now(clock);
             var channel = channels.upsertChannel(ids.next(), authorizedBusiness, customerId, now);
+            if (!authorizedBusiness.equals(channel.businessId()) || !customerId.equals(channel.customerId())) {
+                throw new CustomerChannelAccessDeniedException();
+            }
+            if (!channels.claimInviteIdempotency(authorizedBusiness, INVITE_OPERATION, idempotencyKey,
+                    fingerprint, channel.id(), now)) {
+                var concurrent = channels.findInviteIdempotency(authorizedBusiness, INVITE_OPERATION, idempotencyKey)
+                        .orElseThrow(CustomerChannelInviteConflictException::new);
+                return replayInvite(concurrent, fingerprint);
+            }
+
             var token = CustomerChannelToken.random();
             channels.revokeOpenInvites(authorizedBusiness, channel.id(), now);
             channels.insertInvite(ids.next(), authorizedBusiness, channel.id(), CustomerChannelToken.hash(token),
@@ -69,14 +97,50 @@ public class CustomerChannelService {
 
             var deliveryStatus = "FAILED";
             try {
-                inviteDelivery.send(customer.phone(), publicBaseUrl + "/i/" + token,
-                        idempotencyKey + ":" + channel.id());
+                inviteDelivery.send(phone, publicBaseUrl + "/i/" + token,
+                        deliveryKey(authorizedBusiness, channel.id(), idempotencyKey));
                 deliveryStatus = "QUEUED";
             } catch (RuntimeException ignored) {
-                // The invite remains persisted and can be safely resent after the provider recovers.
+                // Compatibility contract: provider failure is returned as FAILED and is replayable.
             }
-            return new InviteResult(channel.id(), channel.status().name(), deliveryStatus);
+            channels.completeInviteIdempotency(authorizedBusiness, INVITE_OPERATION, idempotencyKey,
+                    "INVITED", deliveryStatus);
+            return new InviteResult(channel.id(), "INVITED", deliveryStatus);
         });
+    }
+
+    private static String normalizeInvitePhone(String phone) {
+        if (phone == null || phone.isBlank()) throw new CustomerInvitePhoneMissingException();
+        try {
+            return PhoneNumber.normalize(phone).e164();
+        } catch (IllegalArgumentException exception) {
+            throw new CustomerInvitePhoneInvalidException();
+        }
+    }
+
+    private static String inviteFingerprint(BusinessId businessId, UUID customerId) {
+        return CustomerChannelToken.hash(INVITE_OPERATION + "\u0000" + businessId.value()
+                + "\u0000" + customerId);
+    }
+
+    private static String deliveryKey(BusinessId businessId, UUID channelId, String idempotencyKey) {
+        return DELIVERY_KEY_PREFIX + CustomerChannelToken.hash(INVITE_OPERATION + "\u0000"
+                + businessId.value() + "\u0000" + channelId + "\u0000" + idempotencyKey);
+    }
+
+    private static InviteResult replayInvite(CustomerChannelRepository.InviteIdempotencyRecord record,
+            String fingerprint) {
+        if (!record.requestFingerprint().equals(fingerprint)
+                || record.responseStatus() == null || record.deliveryStatus() == null) {
+            throw new CustomerChannelInviteConflictException();
+        }
+        return new InviteResult(record.channelId(), record.responseStatus(), record.deliveryStatus());
+    }
+
+    private static void validateIdempotencyKey(String value) {
+        if (value == null || value.isBlank() || value.length() > 200) {
+            throw new IllegalArgumentException("Idempotency-Key is required and must be at most 200 characters");
+        }
     }
 
     @Transactional

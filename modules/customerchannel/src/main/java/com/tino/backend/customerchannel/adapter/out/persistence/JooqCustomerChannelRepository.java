@@ -49,6 +49,48 @@ public class JooqCustomerChannelRepository implements CustomerChannelRepository 
     }
 
     @Override
+    public Optional<InviteIdempotencyRecord> findInviteIdempotency(BusinessId businessId,
+            String operation, String idempotencyKey) {
+        var row = dsl.fetchOne("""
+                SELECT request_fingerprint, customer_channel_id, response_status, delivery_status
+                  FROM public.customer_channel_invite_idempotency
+                 WHERE business_id = ? AND operation = ? AND idempotency_key = ?
+                 FOR UPDATE
+                """, businessId.value(), operation, idempotencyKey);
+        return row == null ? Optional.empty() : Optional.of(new InviteIdempotencyRecord(
+                row.get("request_fingerprint", String.class),
+                row.get("customer_channel_id", UUID.class),
+                row.get("response_status", String.class),
+                row.get("delivery_status", String.class)));
+    }
+
+    @Override
+    public boolean claimInviteIdempotency(BusinessId businessId, String operation,
+            String idempotencyKey, String requestFingerprint, UUID channelId, Instant createdAt) {
+        return dsl.execute("""
+                INSERT INTO public.customer_channel_invite_idempotency
+                    (business_id, operation, idempotency_key, request_fingerprint,
+                     customer_channel_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT (business_id, operation, idempotency_key) DO NOTHING
+                """, businessId.value(), operation, idempotencyKey, requestFingerprint,
+                channelId, time(createdAt)) == 1;
+    }
+
+    @Override
+    public void completeInviteIdempotency(BusinessId businessId, String operation,
+            String idempotencyKey, String responseStatus, String deliveryStatus) {
+        var updated = dsl.execute("""
+                UPDATE public.customer_channel_invite_idempotency
+                   SET response_status = ?, delivery_status = ?
+                 WHERE business_id = ? AND operation = ? AND idempotency_key = ?
+                """, responseStatus, deliveryStatus, businessId.value(), operation, idempotencyKey);
+        if (updated != 1) {
+            throw new IllegalStateException("customer-channel invite idempotency claim is missing");
+        }
+    }
+
+    @Override
     public void revokeOpenInvites(BusinessId businessId, UUID channelId, Instant now) {
         dsl.execute("""
                 UPDATE public.customer_invites

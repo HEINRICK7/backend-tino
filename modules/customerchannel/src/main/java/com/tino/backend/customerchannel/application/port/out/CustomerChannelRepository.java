@@ -13,6 +13,15 @@ public interface CustomerChannelRepository {
 
     Optional<ChannelRecord> findChannel(BusinessId businessId, UUID customerId);
 
+    Optional<InviteIdempotencyRecord> findInviteIdempotency(BusinessId businessId,
+            String operation, String idempotencyKey);
+
+    boolean claimInviteIdempotency(BusinessId businessId, String operation, String idempotencyKey,
+            String requestFingerprint, UUID channelId, Instant createdAt);
+
+    void completeInviteIdempotency(BusinessId businessId, String operation, String idempotencyKey,
+            String responseStatus, String deliveryStatus);
+
     void revokeOpenInvites(BusinessId businessId, UUID channelId, Instant now);
 
     void insertInvite(UUID id, BusinessId businessId, UUID channelId, String tokenHash,
@@ -43,6 +52,9 @@ public interface CustomerChannelRepository {
 
     record InviteRecord(UUID id, UUID channelId, BusinessId businessId, UUID customerId,
             Instant expiresAt) {}
+
+    record InviteIdempotencyRecord(String requestFingerprint, UUID channelId,
+            String responseStatus, String deliveryStatus) {}
 
     record SessionRecord(UUID id, UUID channelId, BusinessId businessId, UUID customerId,
             Instant expiresAt) {}
