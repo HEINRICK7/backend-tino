@@ -38,6 +38,14 @@ tino:
         path: ${TINO_OTP_DELIVERY_PATH:/internal/v1/messages/otp}
         internal-token: ${TINO_OTP_DELIVERY_INTERNAL_TOKEN:}
         timeout: ${TINO_OTP_DELIVERY_TIMEOUT:PT5S}
+  whatsapp:
+    delivery:
+      enabled: ${TINO_WHATSAPP_DELIVERY_ENABLED:false}
+      provider: ${TINO_WHATSAPP_DELIVERY_PROVIDER:WA_EVOLUTION}
+      base-url: ${TINO_WHATSAPP_DELIVERY_BASE_URL:http://otp-delivery:8080}
+      path: ${TINO_WHATSAPP_DELIVERY_PATH:/internal/v1/messages/whatsapp}
+      internal-token: ${TINO_WHATSAPP_DELIVERY_INTERNAL_TOKEN:}
+      timeout: ${TINO_WHATSAPP_DELIVERY_TIMEOUT:PT10S}
 server:
   shutdown: graceful
   error:

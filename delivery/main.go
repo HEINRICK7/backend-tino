@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -32,8 +33,10 @@ type config struct {
 	providerKey        string
 	instance           string
 	sendPath           string
+	mediaSendPath      string
 	client             *http.Client
 	deliveryRecipients sync.Map
+	whatsappResults    sync.Map
 }
 
 type otpMessage struct {
@@ -42,6 +45,16 @@ type otpMessage struct {
 	Code           string `json:"code"`
 	ExpiresMinutes int    `json:"expires_minutes"`
 	CorrelationID  string `json:"correlation_id"`
+}
+
+type whatsappMessage struct {
+	MessageID      string `json:"message_id"`
+	IdempotencyKey string `json:"idempotency_key"`
+	Recipient      string `json:"recipient"`
+	Text           string `json:"text"`
+	MimeType       string `json:"mime_type"`
+	Filename       string `json:"filename"`
+	MediaBase64    string `json:"media_base64"`
 }
 
 type confirmationEvent struct {
@@ -122,6 +135,7 @@ func main() {
 	mux.HandleFunc("/healthz", health(cfg))
 	mux.HandleFunc("/readyz", health(cfg))
 	mux.HandleFunc("/internal/v1/messages/otp", cfg.sendOTP)
+	mux.HandleFunc("/internal/v1/messages/whatsapp", cfg.sendWhatsApp)
 	mux.HandleFunc("/webhooks/whatsapp", cfg.receiveWebhook)
 
 	server := &http.Server{
@@ -152,8 +166,9 @@ func loadConfig() *config {
 		// OTP is always delivered as plain text. Evolution 2.3.7 may accept
 		// interactive buttons without delivering them, so stale button paths
 		// are normalized below as a final safety boundary.
-		sendPath: normalizeSendPath(os.Getenv("WA_EVOLUTION_SEND_PATH")),
-		client:   &http.Client{Timeout: 5 * time.Second},
+		sendPath:      normalizeSendPath(os.Getenv("WA_EVOLUTION_SEND_PATH")),
+		mediaSendPath: normalizeMediaSendPath(os.Getenv("WA_EVOLUTION_MEDIA_SEND_PATH")),
+		client:        &http.Client{Timeout: 5 * time.Second},
 	}
 }
 
@@ -169,6 +184,13 @@ func normalizeSendPath(value string) string {
 		return "/message/sendText/{instance}"
 	}
 	return valueOr(value, "/message/sendText/{instance}")
+}
+
+func normalizeMediaSendPath(value string) string {
+	if value == "" {
+		return "/message/sendMedia/{instance}"
+	}
+	return value
 }
 
 func (c *config) ready() bool {
@@ -225,6 +247,41 @@ func (c *config) sendOTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (c *config) sendWhatsApp(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if !c.authorized(r.Header.Get("X-Tino-Internal-Token")) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	if !c.ready() {
+		writeResult(w, http.StatusServiceUnavailable, result{Status: "RETRYABLE_FAILURE", Provider: "WA_EVOLUTION"})
+		return
+	}
+	var message whatsappMessage
+	decoder := json.NewDecoder(io.LimitReader(r.Body, 8*1024*1024))
+	if err := decoder.Decode(&message); err != nil || !validWhatsAppMessage(message, c.masterPhone) {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if providerMessageID, found := c.whatsappResults.Load(message.IdempotencyKey); found {
+		writeResult(w, http.StatusAccepted, result{Status: "ACCEPTED", Provider: "WA_EVOLUTION", ProviderMessageID: providerMessageID.(string)})
+		return
+	}
+	status, providerMessageID := c.sendWhatsAppToProvider(r.Context(), message)
+	switch status {
+	case "ACCEPTED":
+		c.whatsappResults.Store(message.IdempotencyKey, providerMessageID)
+		writeResult(w, http.StatusAccepted, result{Status: status, Provider: "WA_EVOLUTION", ProviderMessageID: providerMessageID})
+	case "RETRYABLE_FAILURE":
+		writeResult(w, http.StatusServiceUnavailable, result{Status: status, Provider: "WA_EVOLUTION"})
+	default:
+		writeResult(w, http.StatusBadGateway, result{Status: "PERMANENT_FAILURE", Provider: "WA_EVOLUTION"})
+	}
+}
+
 func (c *config) authorized(supplied string) bool {
 	return supplied != "" && subtle.ConstantTimeCompare([]byte(c.internalToken), []byte(supplied)) == 1
 }
@@ -234,6 +291,23 @@ func validMessage(message otpMessage, masterPhone string) bool {
 		message.Template == "AUTH_OTP" && len(message.Code) == 6 && codePattern.MatchString(message.Code) &&
 		message.ExpiresMinutes > 0 && message.ExpiresMinutes <= 15 &&
 		safeCorrelationID(message.CorrelationID)
+}
+
+func validWhatsAppMessage(message whatsappMessage, masterPhone string) bool {
+	if !brazilianPhone.MatchString(message.Recipient) || message.Recipient == masterPhone ||
+		!safeCorrelationID(message.MessageID) || len(message.MessageID) > 100 ||
+		!safeCorrelationID(message.IdempotencyKey) || len(message.IdempotencyKey) > 200 ||
+		message.Text == "" || len(message.Text) > 12000 || message.MimeType != "image/png" ||
+		!safeFilename(message.Filename) || message.MediaBase64 == "" || len(message.MediaBase64) > 7*1024*1024 {
+		return false
+	}
+	decoded, err := base64.StdEncoding.DecodeString(message.MediaBase64)
+	return err == nil && len(decoded) > 8 && len(decoded) <= 5*1024*1024 &&
+		string(decoded[:8]) == "\x89PNG\r\n\x1a\n"
+}
+
+func safeFilename(value string) bool {
+	return value != "" && len(value) <= 160 && !strings.ContainsAny(value, "/\\\r\n\"")
 }
 
 var codePattern = regexp.MustCompile(`^[0-9]{6}$`)
@@ -550,6 +624,67 @@ func (c *config) sendToProvider(ctx context.Context, message otpMessage) (string
 		return "RETRYABLE_FAILURE", ""
 	}
 	return "PERMANENT_FAILURE", ""
+}
+
+func (c *config) sendWhatsAppToProvider(ctx context.Context, message whatsappMessage) (string, string) {
+	path := strings.ReplaceAll(normalizeMediaSendPath(c.mediaSendPath), "{instance}", c.instance)
+	body, err := json.Marshal(struct {
+		Number   string `json:"number"`
+		Media    string `json:"media"`
+		Mimetype string `json:"mimetype"`
+		Caption  string `json:"caption"`
+		FileName string `json:"fileName"`
+	}{
+		Number: strings.TrimPrefix(message.Recipient, "+"),
+		Media:  message.MediaBase64, Mimetype: message.MimeType,
+		Caption: message.Text, FileName: message.Filename,
+	})
+	if err != nil {
+		return "PERMANENT_FAILURE", ""
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.providerURL+path, strings.NewReader(string(body)))
+	if err != nil {
+		return "PERMANENT_FAILURE", ""
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Accept", "application/json")
+	request.Header.Set("apikey", c.providerKey)
+	response, err := c.client.Do(request)
+	if err != nil {
+		return "RETRYABLE_FAILURE", ""
+	}
+	defer response.Body.Close()
+	responseBody, _ := io.ReadAll(io.LimitReader(response.Body, 16*1024))
+	if response.StatusCode >= 200 && response.StatusCode < 300 {
+		providerMessageID := providerMessageIDFromResponse(responseBody)
+		if providerMessageID == "" {
+			return "RETRYABLE_FAILURE", ""
+		}
+		c.deliveryRecipients.Store(providerMessageID, message.Recipient)
+		return "ACCEPTED", providerMessageID
+	}
+	if response.StatusCode == 408 || response.StatusCode == 429 || response.StatusCode >= 500 {
+		return "RETRYABLE_FAILURE", ""
+	}
+	return "PERMANENT_FAILURE", ""
+}
+
+func providerMessageIDFromResponse(payload []byte) string {
+	var response struct {
+		Key struct {
+			ID string `json:"id"`
+		} `json:"key"`
+		KeyID string `json:"keyId"`
+		Data  struct {
+			Key struct {
+				ID string `json:"id"`
+			} `json:"key"`
+		} `json:"data"`
+	}
+	if json.Unmarshal(payload, &response) != nil {
+		return ""
+	}
+	return firstNonBlank(response.Key.ID, response.KeyID, response.Data.Key.ID)
 }
 
 func writeResult(w http.ResponseWriter, status int, value result) {

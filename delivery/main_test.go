@@ -3,11 +3,13 @@ package main
 import (
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -21,6 +23,81 @@ func TestSendOTPRejectsMissingInternalToken(t *testing.T) {
 
 	if response.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestSendWhatsAppForwardsPngAndCaptionToProvider(t *testing.T) {
+	var receivedPath string
+	var receivedBody string
+	provider := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		receivedPath = request.URL.Path
+		body, _ := io.ReadAll(request.Body)
+		receivedBody = string(body)
+		_, _ = writer.Write([]byte(`{"key":{"id":"media-message-1"}}`))
+	}))
+	defer provider.Close()
+
+	png := base64.StdEncoding.EncodeToString([]byte("\x89PNG\r\n\x1a\nimage"))
+	cfg := &config{internalToken: "internal", providerURL: provider.URL, providerKey: "provider-key",
+		instance: "tino", mediaSendPath: "/message/sendMedia/{instance}", client: provider.Client()}
+	request := httptest.NewRequest(http.MethodPost, "/internal/v1/messages/whatsapp", strings.NewReader(
+		`{"message_id":"message-1","idempotency_key":"send-1","recipient":"+5586995922924","text":"Olá, Gerlane.","mime_type":"image/png","filename":"debt-statement-v1.png","media_base64":"`+png+`"}`))
+	request.Header.Set("X-Tino-Internal-Token", "internal")
+	response := httptest.NewRecorder()
+
+	cfg.sendWhatsApp(response, request)
+
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusAccepted)
+	}
+	if receivedPath != "/message/sendMedia/tino" {
+		t.Fatalf("path = %q", receivedPath)
+	}
+	if !strings.Contains(receivedBody, `"number":"5586995922924"`) ||
+		!strings.Contains(receivedBody, `"caption":"Olá, Gerlane."`) ||
+		!strings.Contains(receivedBody, `"mimetype":"image/png"`) {
+		t.Fatalf("provider media body = %q", receivedBody)
+	}
+}
+
+func TestSendWhatsAppReplaysAcceptedIdempotencyWithoutCallingProviderTwice(t *testing.T) {
+	var providerCalls atomic.Int32
+	provider := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		providerCalls.Add(1)
+		_, _ = writer.Write([]byte(`{"key":{"id":"media-message-once"}}`))
+	}))
+	defer provider.Close()
+
+	png := base64.StdEncoding.EncodeToString([]byte("\x89PNG\r\n\x1a\nimage"))
+	cfg := &config{internalToken: "internal", providerURL: provider.URL, providerKey: "provider-key",
+		instance: "tino", mediaSendPath: "/message/sendMedia/{instance}", client: provider.Client()}
+	body := `{"message_id":"message-1","idempotency_key":"send-once","recipient":"+5586995922924","text":"Olá","mime_type":"image/png","filename":"card.png","media_base64":"` + png + `"}`
+	for attempt := 0; attempt < 2; attempt++ {
+		request := httptest.NewRequest(http.MethodPost, "/internal/v1/messages/whatsapp", strings.NewReader(body))
+		request.Header.Set("X-Tino-Internal-Token", "internal")
+		response := httptest.NewRecorder()
+		cfg.sendWhatsApp(response, request)
+		if response.Code != http.StatusAccepted || !strings.Contains(response.Body.String(), "media-message-once") {
+			t.Fatalf("attempt %d: status=%d body=%s", attempt, response.Code, response.Body.String())
+		}
+	}
+	if providerCalls.Load() != 1 {
+		t.Fatalf("provider calls = %d, want 1", providerCalls.Load())
+	}
+}
+
+func TestSendWhatsAppRejectsNonPngMedia(t *testing.T) {
+	cfg := &config{internalToken: "internal", providerURL: "http://provider", providerKey: "key", instance: "tino"}
+	encoded := base64.StdEncoding.EncodeToString([]byte("not-a-png"))
+	request := httptest.NewRequest(http.MethodPost, "/internal/v1/messages/whatsapp", strings.NewReader(
+		`{"message_id":"message-1","idempotency_key":"send-1","recipient":"+5586995922924","text":"texto","mime_type":"image/png","filename":"card.png","media_base64":"`+encoded+`"}`))
+	request.Header.Set("X-Tino-Internal-Token", "internal")
+	response := httptest.NewRecorder()
+
+	cfg.sendWhatsApp(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusBadRequest)
 	}
 }
 

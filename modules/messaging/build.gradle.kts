@@ -10,6 +10,7 @@ dependencies {
     implementation(libs.jooq)
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.security)
+    implementation("io.micrometer:micrometer-core")
     testImplementation(libs.spring.boot.starter.test)
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }

@@ -107,6 +107,12 @@ services:
       TINO_OTP_DELIVERY_PATH: ${TINO_OTP_DELIVERY_PATH:-/internal/v1/messages/otp}
       TINO_OTP_DELIVERY_INTERNAL_TOKEN: ${TINO_OTP_DELIVERY_INTERNAL_TOKEN:-}
       TINO_OTP_DELIVERY_TIMEOUT: ${TINO_OTP_DELIVERY_TIMEOUT:-PT5S}
+      TINO_WHATSAPP_DELIVERY_ENABLED: ${TINO_WHATSAPP_DELIVERY_ENABLED:-false}
+      TINO_WHATSAPP_DELIVERY_PROVIDER: ${TINO_WHATSAPP_DELIVERY_PROVIDER:-WA_EVOLUTION}
+      TINO_WHATSAPP_DELIVERY_BASE_URL: ${TINO_WHATSAPP_DELIVERY_BASE_URL:-http://otp-delivery:8080}
+      TINO_WHATSAPP_DELIVERY_PATH: ${TINO_WHATSAPP_DELIVERY_PATH:-/internal/v1/messages/whatsapp}
+      TINO_WHATSAPP_DELIVERY_INTERNAL_TOKEN: ${TINO_WHATSAPP_DELIVERY_INTERNAL_TOKEN:-}
+      TINO_WHATSAPP_DELIVERY_TIMEOUT: ${TINO_WHATSAPP_DELIVERY_TIMEOUT:-PT10S}
     depends_on:
       postgres:
         condition: service_healthy
@@ -135,6 +141,7 @@ services:
       WA_EVOLUTION_BASE_URL: ${WA_EVOLUTION_BASE_URL:-}
       WA_EVOLUTION_API_KEY: ${WA_EVOLUTION_API_KEY:-}
       WA_EVOLUTION_INSTANCE: ${WA_EVOLUTION_INSTANCE:-}
+      WA_EVOLUTION_MEDIA_SEND_PATH: ${WA_EVOLUTION_MEDIA_SEND_PATH:-/message/sendMedia/{instance}}
       # Evolution 2.3.7 does not reliably deliver interactive buttons.
       # Keep production OTP delivery on plain text even if an old secret still
       # contains WA_EVOLUTION_SEND_PATH=/message/sendButtons/{instance}.

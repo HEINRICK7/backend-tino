@@ -210,6 +210,7 @@ jobs:
           TINO_VPS_IPV4="$(dotenv_value TINO_VPS_IPV4)"
           TINO_LETSENCRYPT_EMAIL="$(dotenv_value TINO_LETSENCRYPT_EMAIL)"
           TINO_OTP_ENABLED="$(dotenv_value TINO_OTP_ENABLED)"
+          TINO_WHATSAPP_DELIVERY_ENABLED="$(dotenv_value TINO_WHATSAPP_DELIVERY_ENABLED)"
           : "${TINO_API_HOST:?missing TINO_API_HOST}"
           : "${TINO_AUTH_HOST:?missing TINO_AUTH_HOST}"
           : "${TINO_VPS_IPV4:?missing TINO_VPS_IPV4}"
@@ -218,6 +219,10 @@ jobs:
             echo 'Production deployment requires TINO_OTP_ENABLED=true; refusing to publish a login-disabled backend' >&2
             exit 27
           }
+          test "$TINO_WHATSAPP_DELIVERY_ENABLED" = "true" || {
+            echo 'Production deployment requires TINO_WHATSAPP_DELIVERY_ENABLED=true; refusing to publish an unconnected WhatsApp renderer' >&2
+            exit 31
+          }
           for required_otp_secret in TINO_OTP_HASH_SECRET TINO_OTP_INTERNAL_TOKEN TINO_OTP_DELIVERY_INTERNAL_TOKEN WA_EVOLUTION_BASE_URL WA_EVOLUTION_API_KEY WA_EVOLUTION_INSTANCE; do
             value="$(dotenv_value "$required_otp_secret")"
             test -n "$value" || {
@@ -225,6 +230,15 @@ jobs:
               exit 28
             }
           done
+          if test "$TINO_WHATSAPP_DELIVERY_ENABLED" = "true"; then
+            for required_whatsapp_secret in TINO_WHATSAPP_DELIVERY_INTERNAL_TOKEN WA_EVOLUTION_BASE_URL WA_EVOLUTION_API_KEY WA_EVOLUTION_INSTANCE; do
+              value="$(dotenv_value "$required_whatsapp_secret")"
+              test -n "$value" || {
+                echo "Production deployment is missing $required_whatsapp_secret; refusing to publish an unusable WhatsApp renderer" >&2
+                exit 30
+              }
+            done
+          fi
           webhook_secret="$(dotenv_value WA_EVOLUTION_WEBHOOK_SECRET)"
           webhook_token="$(dotenv_value WA_EVOLUTION_WEBHOOK_TOKEN)"
           test -n "$webhook_secret" || test -n "$webhook_token" || {
@@ -278,7 +292,7 @@ jobs:
           compose() {
             docker compose --env-file "$env_file" -f /opt/tino/compose.vps.yaml "$@"
           }
-          if test "$TINO_OTP_ENABLED" = "true"; then
+          if test "$TINO_OTP_ENABLED" = "true" || test "$TINO_WHATSAPP_DELIVERY_ENABLED" = "true"; then
             compose --profile otp pull app keycloak otp-delivery
             compose --profile otp up -d --no-build --remove-orphans
           else

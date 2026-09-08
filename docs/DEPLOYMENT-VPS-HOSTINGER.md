@@ -104,9 +104,15 @@ TINO_OTP_ENABLED=true
 TINO_OTP_HASH_SECRET=generate-a-long-random-value
 TINO_OTP_INTERNAL_TOKEN=generate-a-long-random-value
 TINO_OTP_DELIVERY_INTERNAL_TOKEN=generate-a-long-random-value
+TINO_WHATSAPP_DELIVERY_ENABLED=true
+TINO_WHATSAPP_DELIVERY_PROVIDER=WA_EVOLUTION
+# This must match the delivery service's internal token. Keep it private.
+TINO_WHATSAPP_DELIVERY_INTERNAL_TOKEN=same-value-as-TINO_OTP_DELIVERY_INTERNAL_TOKEN
+TINO_WHATSAPP_DELIVERY_TIMEOUT=PT10S
 WA_EVOLUTION_BASE_URL=http://evolution-api:8080
 WA_EVOLUTION_API_KEY=secret-from-evolution
 WA_EVOLUTION_INSTANCE=tino
+WA_EVOLUTION_MEDIA_SEND_PATH=/message/sendMedia/{instance}
 # Keep OTP delivery as plain text; sendButtons is provider/version dependent.
 WA_EVOLUTION_SEND_PATH=/message/sendText/{instance}
 WA_EVOLUTION_WEBHOOK_SECRET=generate-a-long-random-value
@@ -140,7 +146,8 @@ to this repository/environment.
 The workflow performs a DNS check, validates the existing host Nginx, checks
 the private TINO ports `18080/18581`, obtains/renews the two Let’s Encrypt
 certificates, validates the Compose file, pulls the image, runs `up -d` for the
-TINO project and performs an HTTPS readiness check. It reloads Nginx only after
+TINO project and performs an HTTPS readiness check. The `otp` Compose profile
+is enabled whenever OTP or WhatsApp delivery is enabled. It reloads Nginx only after
 `nginx -t` passes and never calls `down`, `stop` or `restart` on existing
 projects.
 
