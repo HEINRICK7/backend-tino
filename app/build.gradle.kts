@@ -14,6 +14,7 @@ dependencies {
     implementation(project(":modules:bootstrap"))
     implementation(project(":modules:sync"))
     implementation(project(":modules:customer"))
+    implementation(project(":modules:customerchannel"))
     implementation(project(":modules:credit"))
     implementation(project(":modules:payment"))
     implementation(project(":modules:reconciliation"))

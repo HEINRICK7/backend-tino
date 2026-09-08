@@ -46,6 +46,11 @@ tino:
       path: ${TINO_WHATSAPP_DELIVERY_PATH:/internal/v1/messages/whatsapp}
       internal-token: ${TINO_WHATSAPP_DELIVERY_INTERNAL_TOKEN:}
       timeout: ${TINO_WHATSAPP_DELIVERY_TIMEOUT:PT10S}
+  customer-channel:
+    public-base-url: ${TINO_CUSTOMER_CHANNEL_PUBLIC_BASE_URL:http://localhost:5173}
+    session:
+      cookie-name: ${TINO_CUSTOMER_CHANNEL_SESSION_COOKIE:tino_customer_session}
+      secure: ${TINO_CUSTOMER_CHANNEL_SESSION_SECURE:false}
 server:
   shutdown: graceful
   error:

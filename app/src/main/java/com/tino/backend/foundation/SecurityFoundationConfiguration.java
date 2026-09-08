@@ -1,5 +1,6 @@
 package com.tino.backend.foundation;
 
+import com.tino.backend.customerchannel.adapter.in.security.CustomerChannelAuthenticationFilter;
 import java.time.Instant;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,13 +21,15 @@ import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.SupplierJwtDecoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.util.StringUtils;
 
 @Configuration(proxyBeanMethods = false)
 public class SecurityFoundationConfiguration {
     @Bean
     SecurityFilterChain securityFilterChain(
-            HttpSecurity http, Converter<Jwt, AbstractAuthenticationToken> jwtAuthenticationConverter)
+            HttpSecurity http, Converter<Jwt, AbstractAuthenticationToken> jwtAuthenticationConverter,
+            CustomerChannelAuthenticationFilter customerChannelAuthenticationFilter)
             throws Exception {
         return http.authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(
@@ -36,6 +39,7 @@ public class SecurityFoundationConfiguration {
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
                                 "/api/v1/auth/otp/**",
+                                "/api/v1/customer-channel/activation",
                                 "/internal/v1/identity/otp/**")
                         .permitAll()
                         .requestMatchers("/api/v1/businesses/*/payment-webhooks/**")
@@ -43,6 +47,7 @@ public class SecurityFoundationConfiguration {
                         .anyRequest()
                         .authenticated())
                 .csrf(csrf -> csrf.disable())
+                .addFilterBefore(customerChannelAuthenticationFilter, BearerTokenAuthenticationFilter.class)
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt
                         .jwtAuthenticationConverter(jwtAuthenticationConverter)))
                 .build();

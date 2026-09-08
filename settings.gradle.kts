@@ -23,6 +23,7 @@ include(
     "modules:bootstrap",
     "modules:sync",
     "modules:customer",
+    "modules:customerchannel",
     "modules:credit",
     "modules:payment",
     "modules:reconciliation",

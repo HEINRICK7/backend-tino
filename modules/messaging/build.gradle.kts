@@ -1,6 +1,10 @@
 plugins { id("tino.java-conventions") }
 
 dependencies {
+    compileOnly(libs.spring.modulith.starter.core)
+}
+
+dependencies {
     api(platform(libs.spring.boot.dependencies))
     api(project(":shared:kernel"))
     implementation(project(":modules:business"))

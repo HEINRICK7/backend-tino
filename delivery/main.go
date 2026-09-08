@@ -297,8 +297,14 @@ func validWhatsAppMessage(message whatsappMessage, masterPhone string) bool {
 	if !brazilianPhone.MatchString(message.Recipient) || message.Recipient == masterPhone ||
 		!safeCorrelationID(message.MessageID) || len(message.MessageID) > 100 ||
 		!safeCorrelationID(message.IdempotencyKey) || len(message.IdempotencyKey) > 200 ||
-		message.Text == "" || len(message.Text) > 12000 || message.MimeType != "image/png" ||
-		!safeFilename(message.Filename) || message.MediaBase64 == "" || len(message.MediaBase64) > 7*1024*1024 {
+		message.Text == "" || len(message.Text) > 12000 {
+		return false
+	}
+	if message.MimeType == "text/plain" {
+		return message.MediaBase64 == ""
+	}
+	if message.MimeType != "image/png" || !safeFilename(message.Filename) ||
+		message.MediaBase64 == "" || len(message.MediaBase64) > 7*1024*1024 {
 		return false
 	}
 	decoded, err := base64.StdEncoding.DecodeString(message.MediaBase64)
@@ -627,6 +633,17 @@ func (c *config) sendToProvider(ctx context.Context, message otpMessage) (string
 }
 
 func (c *config) sendWhatsAppToProvider(ctx context.Context, message whatsappMessage) (string, string) {
+	if message.MimeType == "text/plain" {
+		path := strings.ReplaceAll(normalizeSendPath(c.sendPath), "{instance}", c.instance)
+		body, err := json.Marshal(providerMessage{
+			Number: strings.TrimPrefix(message.Recipient, "+"),
+			Text:   message.Text,
+		})
+		if err != nil {
+			return "PERMANENT_FAILURE", ""
+		}
+		return c.sendProviderRequest(ctx, path, body, message.Recipient)
+	}
 	path := strings.ReplaceAll(normalizeMediaSendPath(c.mediaSendPath), "{instance}", c.instance)
 	body, err := json.Marshal(struct {
 		Number   string `json:"number"`
@@ -661,6 +678,34 @@ func (c *config) sendWhatsAppToProvider(ctx context.Context, message whatsappMes
 			return "RETRYABLE_FAILURE", ""
 		}
 		c.deliveryRecipients.Store(providerMessageID, message.Recipient)
+		return "ACCEPTED", providerMessageID
+	}
+	if response.StatusCode == 408 || response.StatusCode == 429 || response.StatusCode >= 500 {
+		return "RETRYABLE_FAILURE", ""
+	}
+	return "PERMANENT_FAILURE", ""
+}
+
+func (c *config) sendProviderRequest(ctx context.Context, path string, body []byte, recipient string) (string, string) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.providerURL+path, strings.NewReader(string(body)))
+	if err != nil {
+		return "PERMANENT_FAILURE", ""
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Accept", "application/json")
+	request.Header.Set("apikey", c.providerKey)
+	response, err := c.client.Do(request)
+	if err != nil {
+		return "RETRYABLE_FAILURE", ""
+	}
+	defer response.Body.Close()
+	responseBody, _ := io.ReadAll(io.LimitReader(response.Body, 16*1024))
+	if response.StatusCode >= 200 && response.StatusCode < 300 {
+		providerMessageID := providerMessageIDFromResponse(responseBody)
+		if providerMessageID == "" {
+			return "RETRYABLE_FAILURE", ""
+		}
+		c.deliveryRecipients.Store(providerMessageID, recipient)
 		return "ACCEPTED", providerMessageID
 	}
 	if response.StatusCode == 408 || response.StatusCode == 429 || response.StatusCode >= 500 {
