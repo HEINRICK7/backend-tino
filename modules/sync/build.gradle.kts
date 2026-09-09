@@ -13,6 +13,7 @@ dependencies {
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.security)
     implementation(libs.spring.boot.starter.validation)
+    compileOnly(libs.spring.modulith.starter.core)
     testImplementation(libs.spring.boot.starter.test)
     testImplementation(libs.testcontainers.junit)
     testImplementation(libs.testcontainers.postgresql)

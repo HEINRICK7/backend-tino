@@ -100,6 +100,7 @@ class SyncPushUseCaseTest {
                 deviceReader(Optional.of(activeInstallation(BUSINESS_ID))),
                 repository,
                 new SyncEventHandlerRegistry(List.of(handler())),
+                List.of(),
                 IDS,
                 CLOCK).execute(USER_ID, null, List.of(event(EVENT_ID, "known", "device-a")));
 
@@ -155,6 +156,7 @@ class SyncPushUseCaseTest {
                 deviceReader(installation),
                 repository,
                 new SyncEventHandlerRegistry(handlers),
+                List.of(),
                 IDS,
                 CLOCK);
     }

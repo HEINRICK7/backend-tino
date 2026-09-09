@@ -11,6 +11,7 @@ import com.tino.backend.sync.application.exception.SyncPersistenceException;
 import com.tino.backend.sync.application.exception.SyncUnavailableException;
 import com.tino.backend.sync.application.model.SyncEventRejection;
 import com.tino.backend.sync.application.model.SyncPushResult;
+import com.tino.backend.sync.application.port.in.SyncEventProjector;
 import com.tino.backend.sync.application.port.out.SyncEventRepository;
 import com.tino.backend.sync.domain.model.SyncEvent;
 import java.time.Clock;
@@ -32,6 +33,7 @@ public final class ProcessSyncEvents {
     private final DeviceInstallationContextReader devices;
     private final SyncEventRepository events;
     private final SyncEventHandlerRegistry handlers;
+    private final List<SyncEventProjector> projectors;
     private final UuidGenerator ids;
     private final Clock clock;
 
@@ -41,6 +43,7 @@ public final class ProcessSyncEvents {
             DeviceInstallationContextReader devices,
             SyncEventRepository events,
             SyncEventHandlerRegistry handlers,
+            List<SyncEventProjector> projectors,
             UuidGenerator ids,
             Clock clock) {
         this.businesses = Objects.requireNonNull(businesses, "businesses");
@@ -48,6 +51,7 @@ public final class ProcessSyncEvents {
         this.devices = Objects.requireNonNull(devices, "devices");
         this.events = Objects.requireNonNull(events, "events");
         this.handlers = Objects.requireNonNull(handlers, "handlers");
+        this.projectors = List.copyOf(Objects.requireNonNull(projectors, "projectors"));
         this.ids = Objects.requireNonNull(ids, "ids");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
@@ -106,6 +110,9 @@ public final class ProcessSyncEvents {
                 var now = Instant.now(clock);
                 if (!events.claim(businessId, event, now)) {
                     return Outcome.ALREADY_PROCESSED;
+                }
+                for (var projector : projectors) {
+                    projector.project(userId, businessId, event);
                 }
                 events.appendAccepted(businessId, event, effects, ids.next(), now);
                 return Outcome.ACKNOWLEDGED;

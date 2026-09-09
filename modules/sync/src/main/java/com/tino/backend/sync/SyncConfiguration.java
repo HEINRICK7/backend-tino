@@ -5,6 +5,7 @@ import com.tino.backend.business.application.port.in.BusinessContextReader;
 import com.tino.backend.device.application.port.in.DeviceInstallationContextReader;
 import com.tino.backend.shared.kernel.UuidGenerator;
 import com.tino.backend.sync.application.port.in.SyncEventHandler;
+import com.tino.backend.sync.application.port.in.SyncEventProjector;
 import com.tino.backend.sync.application.port.out.SyncEventRepository;
 import com.tino.backend.sync.application.port.out.SyncChangeRepository;
 import com.tino.backend.sync.application.usecase.ProcessSyncEvents;
@@ -30,10 +31,11 @@ public class SyncConfiguration {
             DeviceInstallationContextReader devices,
             SyncEventRepository events,
             SyncEventHandlerRegistry handlers,
+            List<SyncEventProjector> projectors,
             UuidGenerator ids,
             Clock clock) {
         return new ProcessSyncEvents(
-                businesses, businessAuthorization, devices, events, handlers, ids, clock);
+                businesses, businessAuthorization, devices, events, handlers, projectors, ids, clock);
     }
 
     @Bean
