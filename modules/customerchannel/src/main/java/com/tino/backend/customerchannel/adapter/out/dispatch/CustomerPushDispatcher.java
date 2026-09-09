@@ -60,7 +60,13 @@ public final class CustomerPushDispatcher {
         }
 
         if (subscriptions.isEmpty()) {
-            channels.markPushNotificationDelivered(notification.id(), clock.instant());
+            if (notification.attempts() >= MAX_ATTEMPTS - 1) {
+                channels.markPushNotificationDelivered(notification.id(), clock.instant());
+                LOG.warn("customer push notification abandoned without an active subscription after attempts={} notificationId={}",
+                        notification.attempts() + 1, notification.id());
+            } else {
+                retry(notification, "no active push subscriptions");
+            }
             return;
         }
 
