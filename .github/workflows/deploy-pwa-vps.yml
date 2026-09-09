@@ -147,10 +147,12 @@ jobs:
           pwa_release=/opt/tino/pwa/releases/$PWA_SHA
           previous_release="$(readlink -f /opt/tino/pwa/current 2>/dev/null || true)"
           rollback() {
+            exit_status=$?
             if test -n "$previous_release" && test -d "$previous_release"; then
               ln -sfn "$previous_release" /opt/tino/pwa/current
               nginx -t >/dev/null 2>&1 && systemctl reload nginx || true
             fi
+            exit "$exit_status"
           }
           trap rollback EXIT
           test "$(getent ahostsv4 "$TINO_PWA_HOST" | awk 'NR == 1 {print $1}')" = "$TINO_VPS_IPV4"
