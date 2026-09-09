@@ -90,7 +90,9 @@ public class CustomerChannelService {
 
     /**
      * A normal invite is one-time per customer. Reissue is an explicit escape
-     * hatch for a failed or no-longer-usable invite.
+     * hatch for a failed or no-longer-usable invite, including recovery after
+     * the customer has already activated the channel but lost the session
+     * cookie (for example, after uninstalling the PWA).
      */
     public InviteResult invite(UUID userId, BusinessId businessId, UUID customerId, String idempotencyKey,
             InviteCustomerData customerData, boolean reissue) {
@@ -118,7 +120,7 @@ public class CustomerChannelService {
             if (!authorizedBusiness.equals(channel.businessId()) || !customerId.equals(channel.customerId())) {
                 throw new CustomerChannelAccessDeniedException();
             }
-            if (channel.status() == CustomerChannelStatus.ACTIVE) {
+            if (channel.status() == CustomerChannelStatus.ACTIVE && !reissue) {
                 return InvitePreparation.completed(new InviteResult(channel.id(), "ACTIVE", "ALREADY_ACTIVE"));
             }
 

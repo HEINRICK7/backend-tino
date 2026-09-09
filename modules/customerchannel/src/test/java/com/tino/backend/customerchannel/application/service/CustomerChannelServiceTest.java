@@ -173,6 +173,27 @@ class CustomerChannelServiceTest {
     }
 
     @Test
+    void explicitRecoveryForActiveCustomerCreatesANewOneTimeInvite() {
+        var repository = new MemoryChannels();
+        var delivery = new RecordingDelivery();
+        var service = service(authorize(BUSINESS_ID), customerRepository(
+                customer(CUSTOMER_ID, BUSINESS_ID, CustomerStatus.ACTIVE, "+5586995922924")),
+                repository, delivery, Clock.fixed(NOW, ZoneOffset.UTC));
+
+        service.invite(UUID.randomUUID(), BUSINESS_ID, CUSTOMER_ID, "activate-first");
+        service.activate(delivery.items.get(0).token(), "activation-key");
+
+        var recovery = service.invite(UUID.randomUUID(), BUSINESS_ID, CUSTOMER_ID,
+                "recovery-1", null, true);
+
+        assertThat(recovery.status()).isEqualTo("INVITED");
+        assertThat(recovery.deliveryStatus()).isEqualTo("QUEUED");
+        assertThat(delivery.items).hasSize(2);
+        assertThat(delivery.items.get(0).token()).isNotEqualTo(delivery.items.get(1).token());
+        assertThat(repository.inviteCount).isEqualTo(2);
+    }
+
+    @Test
     void providerFailureIsReturnedAndReplayedAsFailedWithoutFakeSuccess() {
         var repository = new MemoryChannels();
         var delivery = new RecordingDelivery();
