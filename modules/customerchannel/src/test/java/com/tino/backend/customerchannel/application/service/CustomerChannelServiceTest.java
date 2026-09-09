@@ -96,7 +96,7 @@ class CustomerChannelServiceTest {
     }
 
     @Test
-    void differentKeyCreatesNewTokenAndRevokesPreviousOpenInvite() {
+    void differentKeyDoesNotCreateAnotherInviteForTheSameCustomer() {
         var repository = new MemoryChannels();
         var delivery = new RecordingDelivery();
         var service = service(authorize(BUSINESS_ID), customerRepository(
@@ -106,14 +106,14 @@ class CustomerChannelServiceTest {
         var first = service.invite(UUID.randomUUID(), BUSINESS_ID, CUSTOMER_ID, "invite-1");
         var firstToken = delivery.items.get(0).token();
         var second = service.invite(UUID.randomUUID(), BUSINESS_ID, CUSTOMER_ID, "invite-2");
-        var secondToken = delivery.items.get(1).token();
 
         assertThat(second.channelId()).isEqualTo(first.channelId());
         assertThat(second.status()).isEqualTo("INVITED");
-        assertThat(secondToken).isNotEqualTo(firstToken);
-        assertThat(repository.revokeCount).isEqualTo(2);
-        assertThat(repository.findValidInvite(CustomerChannelToken.hash(firstToken), NOW)).isEmpty();
-        assertThat(repository.findValidInvite(CustomerChannelToken.hash(secondToken), NOW)).isPresent();
+        assertThat(second.deliveryStatus()).isEqualTo("QUEUED");
+        assertThat(delivery.items).hasSize(1);
+        assertThat(repository.inviteCount).isEqualTo(1);
+        assertThat(repository.revokeCount).isEqualTo(1);
+        assertThat(repository.findValidInvite(CustomerChannelToken.hash(firstToken), NOW)).isPresent();
     }
 
     @Test
@@ -142,14 +142,34 @@ class CustomerChannelServiceTest {
                 customer(CUSTOMER_ID, BUSINESS_ID, CustomerStatus.ACTIVE, "+5586995922924")),
                 repository, delivery, Clock.fixed(NOW, ZoneOffset.UTC));
 
+        delivery.fail = true;
         service.invite(UUID.randomUUID(), BUSINESS_ID, CUSTOMER_ID, "invite-first");
-        service.invite(UUID.randomUUID(), BUSINESS_ID, CUSTOMER_ID, "invite-second");
+        delivery.fail = false;
+        service.invite(UUID.randomUUID(), BUSINESS_ID, CUSTOMER_ID, "invite-second", null, true);
 
         assertThat(delivery.items).hasSize(2);
         assertThat(delivery.items.get(0).key()).isNotEqualTo(delivery.items.get(1).key());
         assertThat(delivery.items.get(0).token()).isNotEqualTo(delivery.items.get(1).token());
         assertThat(repository.inviteCount).isEqualTo(2);
         assertThat(repository.revokeCount).isEqualTo(2);
+    }
+
+    @Test
+    void activeCustomerNeverReceivesAnotherInvite() {
+        var repository = new MemoryChannels();
+        var delivery = new RecordingDelivery();
+        var service = service(authorize(BUSINESS_ID), customerRepository(
+                customer(CUSTOMER_ID, BUSINESS_ID, CustomerStatus.ACTIVE, "+5586995922924")),
+                repository, delivery, Clock.fixed(NOW, ZoneOffset.UTC));
+
+        service.invite(UUID.randomUUID(), BUSINESS_ID, CUSTOMER_ID, "activate-first");
+        service.activate(delivery.items.get(0).token(), "activation-key");
+        var result = service.invite(UUID.randomUUID(), BUSINESS_ID, CUSTOMER_ID, "after-active");
+
+        assertThat(result.status()).isEqualTo("ACTIVE");
+        assertThat(result.deliveryStatus()).isEqualTo("ALREADY_ACTIVE");
+        assertThat(delivery.items).hasSize(1);
+        assertThat(repository.inviteCount).isEqualTo(1);
     }
 
     @Test
@@ -166,6 +186,24 @@ class CustomerChannelServiceTest {
 
         assertThat(first.deliveryStatus()).isEqualTo("FAILED");
         assertThat(replay).isEqualTo(first);
+        assertThat(delivery.items).hasSize(1);
+        assertThat(repository.inviteCount).isEqualTo(1);
+    }
+
+    @Test
+    void aNormalRequestDoesNotRetryAFailedInvite() {
+        var repository = new MemoryChannels();
+        var delivery = new RecordingDelivery();
+        delivery.fail = true;
+        var service = service(authorize(BUSINESS_ID), customerRepository(
+                customer(CUSTOMER_ID, BUSINESS_ID, CustomerStatus.ACTIVE, "+5586995922924")),
+                repository, delivery, Clock.fixed(NOW, ZoneOffset.UTC));
+
+        service.invite(UUID.randomUUID(), BUSINESS_ID, CUSTOMER_ID, "failed-first");
+        delivery.fail = false;
+        var repeated = service.invite(UUID.randomUUID(), BUSINESS_ID, CUSTOMER_ID, "failed-second");
+
+        assertThat(repeated.deliveryStatus()).isEqualTo("FAILED");
         assertThat(delivery.items).hasSize(1);
         assertThat(repository.inviteCount).isEqualTo(1);
     }
@@ -329,6 +367,8 @@ class CustomerChannelServiceTest {
         private final Map<String, ActivationIdempotencyRecord> activationIdempotencies = new HashMap<>();
         private final Set<UUID> consumed = new HashSet<>();
         private final Set<UUID> revoked = new HashSet<>();
+        private UUID latestInviteId;
+        private String latestDeliveryStatus;
         private SessionRecord session;
         private String sessionTokenHash;
         private int inviteCount;
@@ -348,6 +388,16 @@ class CustomerChannelServiceTest {
         @Override
         public Optional<ChannelRecord> findChannel(BusinessId businessId, UUID customerId) {
             return Optional.ofNullable(channels.get(channelKey(businessId, customerId)));
+        }
+
+        @Override
+        public Optional<InviteHistoryRecord> findLatestInvite(BusinessId businessId, UUID channelId) {
+            if (latestInviteId == null) return Optional.empty();
+            var invite = invites.get(latestInviteId);
+            if (invite == null || !invite.businessId().equals(businessId)
+                    || !invite.channelId().equals(channelId)) return Optional.empty();
+            return Optional.of(new InviteHistoryRecord(invite.expiresAt(), consumed.contains(invite.id()),
+                    revoked.contains(invite.id()), latestDeliveryStatus));
         }
 
         @Override
@@ -373,6 +423,7 @@ class CustomerChannelServiceTest {
             if (current == null) throw new IllegalStateException("idempotency claim is missing");
             idempotencies.put(key, new InviteIdempotencyRecord(current.requestFingerprint(),
                     current.channelId(), responseStatus, deliveryStatus));
+            latestDeliveryStatus = deliveryStatus;
         }
 
         @Override
@@ -420,6 +471,7 @@ class CustomerChannelServiceTest {
             inviteCount++;
             invites.put(id, new InviteRecord(id, channelId, businessId, channel.customerId(), expiresAt));
             inviteTokenHashes.put(id, tokenHash);
+            latestInviteId = id;
         }
 
         @Override

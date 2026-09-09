@@ -55,6 +55,13 @@ class M29CustomerChannelPostgresTest {
             assertThat(invite.businessId()).isEqualTo(new BusinessId(BUSINESS_ID));
             assertThat(repository.findActiveSession(CustomerChannelToken.hash("b".repeat(32)), NOW))
                     .isPresent();
+            assertThat(repository.findLatestInvite(new BusinessId(BUSINESS_ID), CHANNEL_ID))
+                    .get()
+                    .satisfies(history -> {
+                        assertThat(history.consumed()).isFalse();
+                        assertThat(history.revoked()).isFalse();
+                        assertThat(history.deliveryStatus()).isEqualTo("QUEUED");
+                    });
 
             var key = "m29-activation";
             var fingerprint = CustomerChannelToken.hash("a".repeat(32));

@@ -51,12 +51,13 @@ public final class CustomerChannelController {
             @AuthenticationPrincipal AuthenticatedPrincipal principal,
             @PathVariable UUID businessId, @PathVariable UUID customerId,
             @RequestHeader(name = "Idempotency-Key", required = true) String idempotencyKey,
+            @RequestHeader(name = "X-Tino-Invite-Reissue", defaultValue = "false") boolean reissue,
             @RequestBody(required = false) InviteRequest request) {
         var user = resolveMerchant(principal);
         var customerData = request == null ? null
                 : new CustomerChannelService.InviteCustomerData(request.name(), request.phone());
         var result = channels.invite(user.userId(), new BusinessId(businessId), customerId, idempotencyKey,
-                customerData);
+                customerData, reissue);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(new CustomerChannelViews.InviteResponse(result.channelId(), result.status(), result.deliveryStatus()));
     }

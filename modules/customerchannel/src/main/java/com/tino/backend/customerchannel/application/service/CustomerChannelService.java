@@ -8,6 +8,7 @@ import com.tino.backend.customerchannel.application.model.CustomerChannelViews;
 import com.tino.backend.customerchannel.application.port.in.CustomerChannelPrincipal;
 import com.tino.backend.customerchannel.application.port.out.CustomerChannelRepository;
 import com.tino.backend.customerchannel.application.port.out.CustomerInviteDeliveryPort;
+import com.tino.backend.customerchannel.domain.model.CustomerChannelStatus;
 import com.tino.backend.customerchannel.application.exception.CustomerChannelAccessDeniedException;
 import com.tino.backend.customerchannel.application.exception.CustomerChannelActivationConflictException;
 import com.tino.backend.customerchannel.application.exception.CustomerChannelInviteConflictException;
@@ -84,6 +85,15 @@ public class CustomerChannelService {
      */
     public InviteResult invite(UUID userId, BusinessId businessId, UUID customerId, String idempotencyKey,
             InviteCustomerData customerData) {
+        return invite(userId, businessId, customerId, idempotencyKey, customerData, false);
+    }
+
+    /**
+     * A normal invite is one-time per customer. Reissue is an explicit escape
+     * hatch for a failed or no-longer-usable invite.
+     */
+    public InviteResult invite(UUID userId, BusinessId businessId, UUID customerId, String idempotencyKey,
+            InviteCustomerData customerData, boolean reissue) {
         validateIdempotencyKey(idempotencyKey);
         Objects.requireNonNull(businessId, "businessId");
         Objects.requireNonNull(customerId, "customerId");
@@ -107,6 +117,15 @@ public class CustomerChannelService {
             var channel = channels.upsertChannel(ids.next(), authorizedBusiness, customerId, now);
             if (!authorizedBusiness.equals(channel.businessId()) || !customerId.equals(channel.customerId())) {
                 throw new CustomerChannelAccessDeniedException();
+            }
+            if (channel.status() == CustomerChannelStatus.ACTIVE) {
+                return InvitePreparation.completed(new InviteResult(channel.id(), "ACTIVE", "ALREADY_ACTIVE"));
+            }
+
+            var previousInvite = channels.findLatestInvite(authorizedBusiness, channel.id());
+            if (previousInvite.isPresent() && !canReissue(previousInvite.orElseThrow(), now, reissue)) {
+                return InvitePreparation.completed(new InviteResult(channel.id(), "INVITED",
+                        deliveryStatus(previousInvite.orElseThrow(), now)));
             }
             if (!channels.claimInviteIdempotency(authorizedBusiness, INVITE_OPERATION, idempotencyKey,
                     fingerprint, channel.id(), now)) {
@@ -153,6 +172,24 @@ public class CustomerChannelService {
                     "INVITED", "QUEUED");
             return new InviteResult(pending.channelId(), "INVITED", "QUEUED");
         });
+    }
+
+    private static boolean canReissue(CustomerChannelRepository.InviteHistoryRecord previous,
+            Instant now, boolean reissue) {
+        if (!reissue) return false;
+        return "FAILED".equals(previous.deliveryStatus())
+                || previous.consumed()
+                || previous.revoked()
+                || !previous.expiresAt().isAfter(now);
+    }
+
+    private static String deliveryStatus(CustomerChannelRepository.InviteHistoryRecord previous, Instant now) {
+        return "FAILED".equals(previous.deliveryStatus())
+                || previous.consumed()
+                || previous.revoked()
+                || !previous.expiresAt().isAfter(now)
+                ? "FAILED"
+                : "QUEUED";
     }
 
     private Customer materializeCustomer(BusinessId businessId, UUID customerId,

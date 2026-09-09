@@ -40,6 +40,7 @@ public class JooqCustomerChannelRepository implements CustomerChannelRepository 
                 SELECT id, business_id, customer_id, status, activated_at, last_access_at
                 FROM public.customer_channels
                 WHERE business_id = ? AND customer_id = ?
+                FOR UPDATE
                 """, businessId.value(), customerId);
         return row == null ? Optional.empty() : Optional.of(new ChannelRecord(
                 row.get("id", UUID.class), new BusinessId(row.get("business_id", UUID.class)),
@@ -47,6 +48,31 @@ public class JooqCustomerChannelRepository implements CustomerChannelRepository 
                 CustomerChannelStatus.valueOf(row.get("status", String.class)),
                 instant(row.get("activated_at", OffsetDateTime.class)),
                 instant(row.get("last_access_at", OffsetDateTime.class))));
+    }
+
+    @Override
+    public Optional<InviteHistoryRecord> findLatestInvite(BusinessId businessId, UUID channelId) {
+        var row = dsl.fetchOne("""
+                SELECT i.expires_at, i.consumed_at, i.revoked_at,
+                       COALESCE((
+                           SELECT d.delivery_status
+                             FROM public.customer_channel_invite_idempotency d
+                            WHERE d.business_id = i.business_id
+                              AND d.customer_channel_id = i.customer_channel_id
+                            ORDER BY d.created_at DESC
+                            LIMIT 1
+                       ), 'QUEUED') AS delivery_status
+                  FROM public.customer_invites i
+                 WHERE i.business_id = ? AND i.customer_channel_id = ?
+                 ORDER BY i.created_at DESC, i.id DESC
+                 LIMIT 1
+                 FOR UPDATE
+                """, businessId.value(), channelId);
+        return row == null ? Optional.empty() : Optional.of(new InviteHistoryRecord(
+                instant(row.get("expires_at", OffsetDateTime.class)),
+                row.get("consumed_at", OffsetDateTime.class) != null,
+                row.get("revoked_at", OffsetDateTime.class) != null,
+                row.get("delivery_status", String.class)));
     }
 
     @Override

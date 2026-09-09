@@ -13,6 +13,8 @@ public interface CustomerChannelRepository {
 
     Optional<ChannelRecord> findChannel(BusinessId businessId, UUID customerId);
 
+    Optional<InviteHistoryRecord> findLatestInvite(BusinessId businessId, UUID channelId);
+
     Optional<InviteIdempotencyRecord> findInviteIdempotency(BusinessId businessId,
             String operation, String idempotencyKey);
 
@@ -109,6 +111,9 @@ public interface CustomerChannelRepository {
 
     record InviteRecord(UUID id, UUID channelId, BusinessId businessId, UUID customerId,
             Instant expiresAt) {}
+
+    record InviteHistoryRecord(Instant expiresAt, boolean consumed, boolean revoked,
+            String deliveryStatus) {}
 
     record InviteIdempotencyRecord(String requestFingerprint, UUID channelId,
             String responseStatus, String deliveryStatus) {}
