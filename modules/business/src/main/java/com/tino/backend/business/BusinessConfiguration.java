@@ -16,7 +16,9 @@ import com.tino.backend.business.application.usecase.ExecuteAuthorizedBusinessOp
 import com.tino.backend.business.application.usecase.ListUserBusinesses;
 import com.tino.backend.business.application.usecase.ResolveBusinessAccess;
 import com.tino.backend.business.application.usecase.CompletePhoneChange;
+import com.tino.backend.business.application.usecase.ManageBusinessPix;
 import com.tino.backend.business.application.usecase.RequestPhoneChange;
+import com.tino.backend.business.application.port.out.BusinessPixConfigurationRepository;
 import com.tino.backend.business.application.port.out.PhoneChangeRepository;
 import com.tino.backend.identity.application.port.in.PhoneIdentityManagement;
 import com.tino.backend.identity.application.port.in.PhoneNumberNormalizer;
@@ -27,6 +29,7 @@ import com.tino.backend.shared.kernel.UuidGenerator;
 import java.time.Clock;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.beans.factory.annotation.Value;
 
 /** Composition of M3 application use cases. */
 @Configuration(proxyBeanMethods = false)
@@ -80,6 +83,16 @@ public class BusinessConfiguration {
                 }
             }
         };
+    }
+
+    @Bean
+    ManageBusinessPix manageBusinessPix(
+            BusinessAuthorization authorization,
+            BusinessRepository businesses,
+            BusinessPixConfigurationRepository configurations,
+            Clock clock,
+            @Value("${tino.pix.merchant-city:SAO PAULO}") String merchantCity) {
+        return new ManageBusinessPix(authorization, businesses, configurations, clock, merchantCity);
     }
 
     @Bean

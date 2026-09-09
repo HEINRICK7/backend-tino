@@ -3,6 +3,7 @@ package com.tino.backend.business.adapter.in.web;
 import com.tino.backend.business.application.exception.BusinessAccessDeniedException;
 import com.tino.backend.business.application.exception.InactiveAuthenticatedUserException;
 import com.tino.backend.business.application.port.out.BusinessPersistenceException;
+import com.tino.backend.business.application.port.out.BusinessPixPersistenceException;
 import com.tino.backend.business.application.port.out.DuplicateMembershipException;
 import com.tino.backend.business.domain.model.PhoneChangePersistenceException;
 import com.tino.backend.identity.application.exception.PhoneIdentityConflictException;
@@ -41,6 +42,11 @@ public final class BusinessApiExceptionHandler {
     @ExceptionHandler(BusinessPersistenceException.class)
     ResponseEntity<ErrorResponse> persistenceFailure(BusinessPersistenceException exception) {
         return response(HttpStatus.INTERNAL_SERVER_ERROR, "BUSINESS_PERSISTENCE_FAILURE", "business operation failed");
+    }
+
+    @ExceptionHandler(BusinessPixPersistenceException.class)
+    ResponseEntity<ErrorResponse> pixPersistenceFailure(BusinessPixPersistenceException exception) {
+        return response(HttpStatus.INTERNAL_SERVER_ERROR, "BUSINESS_PIX_PERSISTENCE_FAILURE", "Pix configuration failed");
     }
 
     @ExceptionHandler(PhoneChangePersistenceException.class)

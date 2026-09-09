@@ -343,8 +343,8 @@ class M3BusinessPostgresTest {
         try (var fresh = new M2PostgresTestContainer()) {
             fresh.start();
             var result = migrate(fresh).info();
-            assertThat(result.applied()).hasSize(33);
-            assertThat(result.current().getVersion().getVersion()).isEqualTo("32");
+            assertThat(result.applied()).hasSize(34);
+            assertThat(result.current().getVersion().getVersion()).isEqualTo("33");
         }
     }
 

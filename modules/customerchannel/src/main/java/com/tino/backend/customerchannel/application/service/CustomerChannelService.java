@@ -1,6 +1,7 @@
 package com.tino.backend.customerchannel.application.service;
 
 import com.tino.backend.business.application.port.in.BusinessAuthorization;
+import com.tino.backend.business.application.port.in.BusinessPixReader;
 import com.tino.backend.customer.application.port.out.CustomerRepository;
 import com.tino.backend.customer.domain.model.Customer;
 import com.tino.backend.customer.domain.model.CustomerStatus;
@@ -29,6 +30,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,19 +51,28 @@ public class CustomerChannelService {
     private final TenantContextExecutor tenants;
     private final String publicBaseUrl;
     private final CustomerPushSettings pushSettings;
+    private final BusinessPixReader pixReader;
 
     public CustomerChannelService(BusinessAuthorization authorization, CustomerRepository customers,
             CustomerChannelRepository channels, CustomerInviteDeliveryPort inviteDelivery,
             UuidGenerator ids, Clock clock, TenantContextExecutor tenants,
             @Value("${tino.customer-channel.public-base-url:http://localhost:5173}") String publicBaseUrl) {
         this(authorization, customers, channels, inviteDelivery, ids, clock, tenants, publicBaseUrl,
-                CustomerPushSettings.disabled());
+                CustomerPushSettings.disabled(), businessId -> Optional.empty());
     }
 
     public CustomerChannelService(BusinessAuthorization authorization, CustomerRepository customers,
             CustomerChannelRepository channels, CustomerInviteDeliveryPort inviteDelivery,
             UuidGenerator ids, Clock clock, TenantContextExecutor tenants, String publicBaseUrl,
             CustomerPushSettings pushSettings) {
+        this(authorization, customers, channels, inviteDelivery, ids, clock, tenants, publicBaseUrl,
+                pushSettings, businessId -> Optional.empty());
+    }
+
+    public CustomerChannelService(BusinessAuthorization authorization, CustomerRepository customers,
+            CustomerChannelRepository channels, CustomerInviteDeliveryPort inviteDelivery,
+            UuidGenerator ids, Clock clock, TenantContextExecutor tenants, String publicBaseUrl,
+            CustomerPushSettings pushSettings, BusinessPixReader pixReader) {
         this.authorization = authorization;
         this.customers = customers;
         this.channels = channels;
@@ -71,6 +82,7 @@ public class CustomerChannelService {
         this.tenants = tenants;
         this.publicBaseUrl = publicBaseUrl.replaceAll("/+$", "");
         this.pushSettings = Objects.requireNonNull(pushSettings, "pushSettings");
+        this.pixReader = Objects.requireNonNull(pixReader, "pixReader");
     }
 
     public InviteResult invite(UUID userId, BusinessId businessId, UUID customerId, String idempotencyKey) {
@@ -342,7 +354,8 @@ public class CustomerChannelService {
         });
         var activeSubscriptions = tenants.execute(businessId,
                 () -> channels.countActivePushSubscriptions(businessId, principal.customerId()));
-        return CustomerChannelViews.home(home, pushSettings.enabled(), activeSubscriptions);
+        var pix = tenants.execute(businessId, () -> pixReader.read(businessId));
+        return CustomerChannelViews.home(home, pushSettings.enabled(), activeSubscriptions, pix);
     }
 
     public CustomerChannelViews.PushConfigResponse pushConfig() {

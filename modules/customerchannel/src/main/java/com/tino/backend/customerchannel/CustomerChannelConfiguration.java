@@ -1,6 +1,7 @@
 package com.tino.backend.customerchannel;
 
 import com.tino.backend.business.application.port.in.BusinessAuthorization;
+import com.tino.backend.business.application.port.in.BusinessPixReader;
 import com.tino.backend.customer.application.port.out.CustomerRepository;
 import com.tino.backend.customerchannel.adapter.out.provider.WhatsAppCustomerInviteDeliveryAdapter;
 import com.tino.backend.customerchannel.application.port.out.CustomerChannelRepository;
@@ -43,9 +44,10 @@ public class CustomerChannelConfiguration {
             CustomerInviteDeliveryPort inviteDelivery, UuidGenerator ids, Clock clock,
             TenantContextExecutor tenants,
             @Value("${tino.customer-channel.public-base-url:http://localhost:5173}") String publicBaseUrl,
-            CustomerPushSettings pushSettings) {
+            CustomerPushSettings pushSettings,
+            BusinessPixReader pixReader) {
         return new CustomerChannelService(authorization, customers, channels, inviteDelivery, ids, clock,
-                tenants, publicBaseUrl, pushSettings);
+                tenants, publicBaseUrl, pushSettings, pixReader);
     }
 
     @Bean
