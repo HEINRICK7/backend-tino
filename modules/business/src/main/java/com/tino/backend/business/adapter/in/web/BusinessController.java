@@ -139,7 +139,8 @@ public final class BusinessController {
 
     public record PixRequest(Boolean enabled, String key) {}
 
-    public record PixResponse(boolean configured, boolean enabled, String key, String copyPaste) {}
+    public record PixResponse(boolean configured, boolean enabled, String key,
+            @JsonProperty("copyPaste") String copyPaste) {}
 
     private static PixResponse toPixResponse(
             java.util.Optional<com.tino.backend.business.domain.model.BusinessPixConfiguration> value) {

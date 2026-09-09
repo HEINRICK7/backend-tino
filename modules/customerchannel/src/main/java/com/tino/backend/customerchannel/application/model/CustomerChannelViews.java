@@ -24,7 +24,7 @@ public final class CustomerChannelViews {
     public record Balance(long minor, String currency) {}
     public record Features(boolean push, boolean pix, boolean agreements) {}
     public record Push(int activeSubscriptions) {}
-    public record Pix(boolean enabled, String key, String copyPaste) {}
+    public record Pix(boolean enabled, String key, @JsonProperty("copyPaste") String copyPaste) {}
     public record PushConfigResponse(boolean enabled, String vapidPublicKey) {}
     public record PushSubscriptionResponse(UUID id, String status) {}
     public record ActivityPage(List<Activity> items, @JsonProperty("nextCursor") String nextCursor,
