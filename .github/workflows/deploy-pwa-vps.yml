@@ -184,9 +184,9 @@ jobs:
             /opt/tino/tino-pwa.conf > "$pwa_nginx_config"
           nginx -t
           systemctl reload nginx
-          curl --fail --silent --show-error "https://$TINO_PWA_HOST/" >/dev/null
-          curl --fail --silent --show-error "https://$TINO_PWA_HOST/manifest.webmanifest" >/dev/null
-          pwa_api_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "https://$TINO_PWA_HOST/api/v1/me")"
+          curl -4 --fail --silent --show-error "https://$TINO_PWA_HOST/" >/dev/null
+          curl -4 --fail --silent --show-error "https://$TINO_PWA_HOST/manifest.webmanifest" >/dev/null
+          pwa_api_status="$(curl -4 --silent --show-error --output /dev/null --write-out '%{http_code}' "https://$TINO_PWA_HOST/api/v1/me")"
           test "$pwa_api_status" = 401 || test "$pwa_api_status" = 403
           trap - EXIT
           echo "PWA release $PWA_SHA is live at https://$TINO_PWA_HOST"
