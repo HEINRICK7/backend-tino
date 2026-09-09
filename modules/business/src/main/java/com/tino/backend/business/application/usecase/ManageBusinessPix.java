@@ -2,7 +2,9 @@ package com.tino.backend.business.application.usecase;
 
 import com.tino.backend.business.application.port.in.BusinessAuthorization;
 import com.tino.backend.business.application.port.in.BusinessPixReader;
+import com.tino.backend.business.application.port.in.BusinessPixUnavailableException;
 import com.tino.backend.business.application.port.out.BusinessPixConfigurationRepository;
+import com.tino.backend.business.application.port.out.BusinessPixPersistenceException;
 import com.tino.backend.business.application.port.out.BusinessRepository;
 import com.tino.backend.business.domain.model.BusinessPixConfiguration;
 import com.tino.backend.business.domain.model.BusinessStatus;
@@ -67,7 +69,13 @@ public final class ManageBusinessPix implements BusinessPixReader {
     }
 
     @Override
-    public Optional<BusinessPixConfiguration> read(BusinessId businessId) {
-        return configurations.find(businessId);
+    public Optional<BusinessPixReader.PixView> read(BusinessId businessId) {
+        try {
+            return configurations.find(businessId)
+                    .map(configuration -> new BusinessPixReader.PixView(
+                            configuration.enabled(), configuration.key().value(), configuration.copyPaste()));
+        } catch (BusinessPixPersistenceException exception) {
+            throw new BusinessPixUnavailableException(exception);
+        }
     }
 }

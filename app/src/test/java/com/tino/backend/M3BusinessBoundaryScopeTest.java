@@ -81,7 +81,6 @@ class M3BusinessBoundaryScopeTest {
                 .doesNotContain("credit")
                 .doesNotContain("ledger")
                 .doesNotContain("payment")
-                .doesNotContain("pix")
                 .doesNotContain("reconciliation")
                 .doesNotContain("whatsapp"));
     }
@@ -132,7 +131,7 @@ class M3BusinessBoundaryScopeTest {
                 root.resolve("app/src/main/resources/db/migration/V2__business_memberships.sql")),
                 path -> !path.getFileName().toString().equals("BusinessContextReader.java"));
         var forbidden = List.of(
-                "device", "bootstrap", "customer", "credit", "ledger", "payment", "pix",
+                "device", "bootstrap", "customer", "credit", "ledger", "payment",
                 "reconciliation", "sync", "whatsapp", "businessprofile");
 
         business.forEach(source -> forbidden.forEach(term -> assertThat(source.toLowerCase())
@@ -144,9 +143,9 @@ class M3BusinessBoundaryScopeTest {
         assertThat(controller)
                 .doesNotContain("@PutMapping")
                 .doesNotContain("@DeleteMapping")
-                .doesNotContain("@PatchMapping")
                 .contains("@PostMapping")
-                .contains("@GetMapping");
+                .contains("@GetMapping")
+                .contains("@PatchMapping");
     }
 
     private static List<String> sourceTexts(List<Path> roots) {

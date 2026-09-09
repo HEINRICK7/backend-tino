@@ -2,7 +2,7 @@ package com.tino.backend.customerchannel.application.model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.tino.backend.customerchannel.domain.model.CustomerChannelStatus;
-import com.tino.backend.business.domain.model.BusinessPixConfiguration;
+import com.tino.backend.business.application.port.in.BusinessPixReader;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -43,7 +43,7 @@ public final class CustomerChannelViews {
     }
 
     public static HomeResponse home(CustomerChannelRepositoryHome home, boolean pushEnabled,
-            int activeSubscriptions, java.util.Optional<BusinessPixConfiguration> pixConfiguration) {
+            int activeSubscriptions, java.util.Optional<BusinessPixReader.PixView> pixConfiguration) {
         return new HomeResponse(new Channel(home.status().name()), new Customer(home.customerName()),
                 new Business(home.businessName()), new Account(home.accountStatus(),
                 new Balance(toMinor(home.balance()), home.currency()), home.version(), home.asOf()),
@@ -58,7 +58,7 @@ public final class CustomerChannelViews {
 
     public static HomeResponse home(com.tino.backend.customerchannel.application.port.out.CustomerChannelRepository.HomeRecord home,
             boolean pushEnabled, int activeSubscriptions,
-            java.util.Optional<BusinessPixConfiguration> pixConfiguration) {
+            java.util.Optional<BusinessPixReader.PixView> pixConfiguration) {
         return new HomeResponse(new Channel(home.channelStatus().name()), new Customer(home.customerName()),
                 new Business(home.businessName()), new Account(home.accountStatus(),
                 new Balance(toMinor(home.balance()), home.currency()), home.version(), home.asOf()),
@@ -66,9 +66,9 @@ public final class CustomerChannelViews {
                 pix(pixConfiguration));
     }
 
-    private static Pix pix(java.util.Optional<BusinessPixConfiguration> value) {
+    private static Pix pix(java.util.Optional<BusinessPixReader.PixView> value) {
         return value.map(configuration -> new Pix(
-                        configuration.enabled(), configuration.key().value(), configuration.copyPaste()))
+                        configuration.enabled(), configuration.key(), configuration.copyPaste()))
                 .orElseGet(() -> new Pix(false, null, null));
     }
 

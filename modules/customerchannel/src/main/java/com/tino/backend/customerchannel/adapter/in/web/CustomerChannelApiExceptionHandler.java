@@ -10,7 +10,7 @@ import com.tino.backend.customerchannel.application.exception.CustomerSessionReq
 import com.tino.backend.customerchannel.application.exception.CustomerPushDisabledException;
 import com.tino.backend.customerchannel.application.exception.CustomerPushSubscriptionInvalidException;
 import com.tino.backend.business.application.port.in.BusinessAuthorizationDeniedException;
-import com.tino.backend.business.application.port.out.BusinessPixPersistenceException;
+import com.tino.backend.business.application.port.in.BusinessPixUnavailableException;
 import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -71,7 +71,7 @@ public final class CustomerChannelApiExceptionHandler {
         return response(HttpStatus.BAD_REQUEST, "PUSH_SUBSCRIPTION_INVALID", "push subscription is invalid");
     }
 
-    @ExceptionHandler(BusinessPixPersistenceException.class)
+    @ExceptionHandler(BusinessPixUnavailableException.class)
     ResponseEntity<ErrorResponse> pixUnavailable(RuntimeException exception) {
         return response(HttpStatus.INTERNAL_SERVER_ERROR, "PIX_UNAVAILABLE", "Pix is temporarily unavailable");
     }
