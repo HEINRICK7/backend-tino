@@ -20,6 +20,7 @@ import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -98,6 +99,34 @@ public final class CustomerChannelController {
                 .body(channels.activity(requireCustomer(principal), activityId));
     }
 
+    @GetMapping("/me/push-config")
+    public ResponseEntity<CustomerChannelViews.PushConfigResponse> pushConfig(
+            @AuthenticationPrincipal CustomerChannelPrincipal principal) {
+        requireCustomer(principal);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(channels.pushConfig());
+    }
+
+    @PostMapping("/me/push-subscriptions")
+    public ResponseEntity<CustomerChannelViews.PushSubscriptionResponse> registerPushSubscription(
+            @AuthenticationPrincipal CustomerChannelPrincipal principal,
+            @RequestBody(required = false) PushSubscriptionRequest request) {
+        var customer = requireCustomer(principal);
+        if (request == null || request.keys() == null) throw new IllegalArgumentException("push subscription is required");
+        var result = channels.registerPushSubscription(customer, request.endpoint(),
+                request.keys().p256dh(), request.keys().auth());
+        return ResponseEntity.ok(result);
+    }
+
+    @DeleteMapping("/me/push-subscriptions")
+    public ResponseEntity<Void> removePushSubscription(
+            @AuthenticationPrincipal CustomerChannelPrincipal principal,
+            @RequestBody(required = false) PushSubscriptionDeleteRequest request) {
+        var customer = requireCustomer(principal);
+        if (request == null) throw new IllegalArgumentException("push subscription is required");
+        channels.removePushSubscription(customer, request.endpoint());
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/me/logout")
     public ResponseEntity<Void> logout(@AuthenticationPrincipal CustomerChannelPrincipal principal,
             HttpServletResponse response) {
@@ -129,4 +158,10 @@ public final class CustomerChannelController {
     public record ActivationRequest(String token) {}
 
     public record InviteRequest(String name, String phone) {}
+
+    public record PushSubscriptionRequest(String endpoint, PushSubscriptionKeys keys) {}
+
+    public record PushSubscriptionKeys(String p256dh, String auth) {}
+
+    public record PushSubscriptionDeleteRequest(String endpoint) {}
 }

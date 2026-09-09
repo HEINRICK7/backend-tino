@@ -64,7 +64,7 @@ class M12MessagingPostgresTest {
                     + "public.reconciliation_runs, public.payment_provider_events, public.payment_outbox, "
                     + "public.payment_idempotency_keys, public.payments, public.credit_audit_records, "
                     + "public.credit_idempotency_keys, public.credit_ledger_entries, public.credit_accounts, "
-                    + "public.customer_channel_activation_idempotency, public.customer_sessions, public.customer_invites, public.customer_channels, public.customer_idempotency_keys, public.customers, public.sync_event_rejections, "
+                    + "public.customer_channel_activation_idempotency, public.customer_sessions, public.customer_invites, public.customer_push_subscriptions, public.customer_push_outbox, public.customer_channels, public.customer_idempotency_keys, public.customers, public.sync_event_rejections, "
                     + "public.sync_outbox, public.sync_changes, public.sync_event_claims, public.device_installations, "
                     + "public.phone_change_requests, public.business_memberships, public.businesses, public.users");
         }

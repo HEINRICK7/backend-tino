@@ -38,7 +38,7 @@ class M29CustomerChannelPostgresTest {
                 .migrate();
         try (var connection = migratorConnection(); var statement = connection.createStatement()) {
             statement.execute("TRUNCATE TABLE public.customer_sessions, public.customer_invites, "
-                    + "public.customer_channel_activation_idempotency, public.customer_channels, "
+                    + "public.customer_channel_activation_idempotency, public.customer_push_subscriptions, public.customer_push_outbox, public.customer_channels, "
                     + "public.customers, public.businesses CASCADE");
         }
     }

@@ -8,6 +8,7 @@ import com.tino.backend.credit.application.exception.CreditEntryNotFoundExceptio
 import com.tino.backend.credit.application.exception.CreditInsufficientBalanceException;
 import com.tino.backend.credit.application.model.CreditOperationResult;
 import com.tino.backend.credit.application.port.out.CreditRepository;
+import com.tino.backend.credit.application.port.out.customer.CustomerUpdateNotificationPort;
 import com.tino.backend.credit.domain.model.CreditDirection;
 import com.tino.backend.credit.domain.model.CreditLedgerEntry;
 import com.tino.backend.shared.kernel.BusinessId;
@@ -23,13 +24,20 @@ public final class CompensateCreditEntry {
     private final CreditRepository credits;
     private final UuidGenerator ids;
     private final Clock clock;
+    private final CustomerUpdateNotificationPort customerUpdates;
 
     public CompensateCreditEntry(BusinessAuthorization authorization, CreditRepository credits,
             UuidGenerator ids, Clock clock) {
+        this(authorization, credits, ids, clock, update -> { });
+    }
+
+    public CompensateCreditEntry(BusinessAuthorization authorization, CreditRepository credits,
+            UuidGenerator ids, Clock clock, CustomerUpdateNotificationPort customerUpdates) {
         this.authorization = Objects.requireNonNull(authorization, "authorization");
         this.credits = Objects.requireNonNull(credits, "credits");
         this.ids = Objects.requireNonNull(ids, "ids");
         this.clock = Objects.requireNonNull(clock, "clock");
+        this.customerUpdates = Objects.requireNonNull(customerUpdates, "customerUpdates");
     }
 
     public CreditOperationResult execute(UUID userId, BusinessId businessId, UUID customerId,
@@ -72,6 +80,9 @@ public final class CompensateCreditEntry {
             var compensation = new CreditLedgerEntry(compensationId, authorizedBusiness, account.id(),
                     customerId, direction, original.amount(), "COMPENSATION", original.id(), userId, now);
             credits.insertEntry(compensation);
+            customerUpdates.enqueue(new CustomerUpdateNotificationPort.CustomerUpdate(
+                    authorizedBusiness, customerId, compensation.id(), compensation.direction().name(),
+                    compensation.createdAt()));
             credits.insertAudit(new CreditRepository.AuditRecord(ids.next(), authorizedBusiness, OPERATION,
                     compensation.id(), idempotencyKey, userId, fingerprint, now));
             var updated = credits.findAccountById(authorizedBusiness, account.id(), false).orElseThrow();

@@ -11,6 +11,8 @@ import com.tino.backend.customerchannel.application.port.out.CustomerInviteDeliv
 import com.tino.backend.customerchannel.application.exception.CustomerChannelAccessDeniedException;
 import com.tino.backend.customerchannel.application.exception.CustomerChannelActivationConflictException;
 import com.tino.backend.customerchannel.application.exception.CustomerChannelInviteConflictException;
+import com.tino.backend.customerchannel.application.exception.CustomerPushDisabledException;
+import com.tino.backend.customerchannel.application.exception.CustomerPushSubscriptionInvalidException;
 import com.tino.backend.customerchannel.application.exception.CustomerInviteInvalidException;
 import com.tino.backend.customerchannel.application.exception.CustomerInvitePhoneMissingException;
 import com.tino.backend.customerchannel.application.exception.CustomerInvitePhoneInvalidException;
@@ -45,11 +47,20 @@ public class CustomerChannelService {
     private final Clock clock;
     private final TenantContextExecutor tenants;
     private final String publicBaseUrl;
+    private final CustomerPushSettings pushSettings;
 
     public CustomerChannelService(BusinessAuthorization authorization, CustomerRepository customers,
             CustomerChannelRepository channels, CustomerInviteDeliveryPort inviteDelivery,
             UuidGenerator ids, Clock clock, TenantContextExecutor tenants,
             @Value("${tino.customer-channel.public-base-url:http://localhost:5173}") String publicBaseUrl) {
+        this(authorization, customers, channels, inviteDelivery, ids, clock, tenants, publicBaseUrl,
+                CustomerPushSettings.disabled());
+    }
+
+    public CustomerChannelService(BusinessAuthorization authorization, CustomerRepository customers,
+            CustomerChannelRepository channels, CustomerInviteDeliveryPort inviteDelivery,
+            UuidGenerator ids, Clock clock, TenantContextExecutor tenants, String publicBaseUrl,
+            CustomerPushSettings pushSettings) {
         this.authorization = authorization;
         this.customers = customers;
         this.channels = channels;
@@ -58,6 +69,7 @@ public class CustomerChannelService {
         this.clock = clock;
         this.tenants = tenants;
         this.publicBaseUrl = publicBaseUrl.replaceAll("/+$", "");
+        this.pushSettings = Objects.requireNonNull(pushSettings, "pushSettings");
     }
 
     public InviteResult invite(UUID userId, BusinessId businessId, UUID customerId, String idempotencyKey) {
@@ -289,15 +301,86 @@ public class CustomerChannelService {
             channels.touchChannel(principal.channelId(), Instant.now(clock));
             return null;
         });
-        return new CustomerChannelViews.HomeResponse(
-                new CustomerChannelViews.Channel(home.channelStatus().name()),
-                new CustomerChannelViews.Customer(home.customerName()),
-                new CustomerChannelViews.Business(home.businessName()),
-                new CustomerChannelViews.Account(home.accountStatus(),
-                        new CustomerChannelViews.Balance(toMinor(home.balance()), home.currency()),
-                        home.version(), home.asOf()),
-                new CustomerChannelViews.Features(false, false, false),
-                new CustomerChannelViews.Push(0));
+        var activeSubscriptions = tenants.execute(businessId,
+                () -> channels.countActivePushSubscriptions(businessId, principal.customerId()));
+        return CustomerChannelViews.home(home, pushSettings.enabled(), activeSubscriptions);
+    }
+
+    public CustomerChannelViews.PushConfigResponse pushConfig() {
+        return new CustomerChannelViews.PushConfigResponse(
+                pushSettings.enabled(), pushSettings.enabled() ? pushSettings.vapidPublicKey() : null);
+    }
+
+    @Transactional
+    public CustomerChannelViews.PushSubscriptionResponse registerPushSubscription(
+            CustomerChannelPrincipal principal, String endpoint, String p256dhKey, String authKey) {
+        requirePushEnabled();
+        validatePushSubscription(endpoint, p256dhKey, authKey);
+        var businessId = new BusinessId(principal.businessId());
+        var subscriptionId = tenants.execute(businessId, () -> channels.upsertPushSubscription(
+                ids.next(), businessId, principal.channelId(), principal.customerId(), endpoint,
+                p256dhKey, authKey, Instant.now(clock)));
+        return new CustomerChannelViews.PushSubscriptionResponse(subscriptionId, "ACTIVE");
+    }
+
+    @Transactional
+    public void removePushSubscription(CustomerChannelPrincipal principal, String endpoint) {
+        var businessId = new BusinessId(principal.businessId());
+        validateEndpoint(endpoint);
+        tenants.execute(businessId, () -> {
+            channels.revokePushSubscriptionByEndpoint(
+                    businessId, principal.channelId(), principal.customerId(), endpoint, Instant.now(clock));
+            return null;
+        });
+    }
+
+    private void requirePushEnabled() {
+        if (!pushSettings.enabled()) throw new CustomerPushDisabledException();
+    }
+
+    private static void validatePushSubscription(String endpoint, String p256dhKey, String authKey) {
+        validateEndpoint(endpoint);
+        if (!isBase64UrlKey(p256dhKey, 65) || !isBase64UrlKey(authKey, 16)) {
+            throw new CustomerPushSubscriptionInvalidException();
+        }
+        try {
+            var publicKey = Base64.getUrlDecoder().decode(p256dhKey);
+            if (publicKey.length != 65 || publicKey[0] != 4) {
+                throw new CustomerPushSubscriptionInvalidException();
+            }
+            if (Base64.getUrlDecoder().decode(authKey).length != 16) {
+                throw new CustomerPushSubscriptionInvalidException();
+            }
+        } catch (IllegalArgumentException exception) {
+            throw new CustomerPushSubscriptionInvalidException();
+        }
+    }
+
+    private static boolean isBase64UrlKey(String value, int decodedLength) {
+        if (value == null || value.isBlank() || value.length() > 100 || !value.matches("[A-Za-z0-9_-]+")) {
+            return false;
+        }
+        try {
+            return Base64.getUrlDecoder().decode(value).length == decodedLength;
+        } catch (IllegalArgumentException exception) {
+            return false;
+        }
+    }
+
+    private static void validateEndpoint(String endpoint) {
+        if (endpoint == null || endpoint.isBlank() || endpoint.length() > 2048
+                || !endpoint.startsWith("https://") || endpoint.contains("@")) {
+            throw new CustomerPushSubscriptionInvalidException();
+        }
+        try {
+            var uri = java.net.URI.create(endpoint);
+            if (!uri.isAbsolute() || uri.getHost() == null || uri.getRawQuery() != null
+                    && uri.getRawQuery().length() > 1024) {
+                throw new CustomerPushSubscriptionInvalidException();
+            }
+        } catch (IllegalArgumentException exception) {
+            throw new CustomerPushSubscriptionInvalidException();
+        }
     }
 
     @Transactional(readOnly = true)

@@ -116,6 +116,12 @@ TINO_WHATSAPP_DELIVERY_INTERNAL_TOKEN=same-value-as-TINO_OTP_DELIVERY_INTERNAL_T
 TINO_WHATSAPP_DELIVERY_TIMEOUT=PT10S
 TINO_CUSTOMER_CHANNEL_PUBLIC_BASE_URL=https://app.tino.otimizanegocio.com
 TINO_CUSTOMER_CHANNEL_SESSION_SECURE=true
+TINO_CUSTOMER_PUSH_ENABLED=true
+# VAPID public/private keys are generated once for this PWA origin. Keep the
+# private key in this secret file only; the public key is returned to the PWA.
+TINO_CUSTOMER_PUSH_VAPID_PUBLIC_KEY=base64url-public-key
+TINO_CUSTOMER_PUSH_VAPID_PRIVATE_KEY=base64url-private-key
+TINO_CUSTOMER_PUSH_VAPID_SUBJECT=mailto:suporte@tino.otimizanegocio.com
 WA_EVOLUTION_BASE_URL=http://evolution-api:8080
 WA_EVOLUTION_API_KEY=secret-from-evolution
 WA_EVOLUTION_INSTANCE=tino

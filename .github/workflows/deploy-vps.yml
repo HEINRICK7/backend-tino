@@ -363,6 +363,18 @@ jobs:
             echo 'Production deployment requires TINO_CUSTOMER_CHANNEL_SESSION_SECURE=true' >&2
             exit 34
           }
+          push_enabled="$(dotenv_value TINO_CUSTOMER_PUSH_ENABLED)"
+          test "$push_enabled" = "true" || {
+            echo 'Production deployment requires TINO_CUSTOMER_PUSH_ENABLED=true' >&2
+            exit 40
+          }
+          for required_push_secret in TINO_CUSTOMER_PUSH_VAPID_PUBLIC_KEY TINO_CUSTOMER_PUSH_VAPID_PRIVATE_KEY TINO_CUSTOMER_PUSH_VAPID_SUBJECT; do
+            value="$(dotenv_value "$required_push_secret")"
+            test -n "$value" || {
+              echo "Production deployment is missing $required_push_secret; refusing to publish push-disabled customer notifications" >&2
+              exit 41
+            }
+          done
           systemctl is-active --quiet nginx || {
             echo 'The existing host Nginx service is not active; aborting without changing it' >&2
             exit 25

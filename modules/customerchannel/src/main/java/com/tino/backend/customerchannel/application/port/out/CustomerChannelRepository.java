@@ -57,6 +57,53 @@ public interface CustomerChannelRepository {
 
     Optional<ActivityRecord> findActivity(BusinessId businessId, UUID customerId, UUID activityId);
 
+    default UUID upsertPushSubscription(UUID id, BusinessId businessId, UUID channelId,
+            UUID customerId, String endpoint, String p256dhKey, String authKey, Instant now) {
+        throw new UnsupportedOperationException("push subscriptions are not available");
+    }
+
+    default int countActivePushSubscriptions(BusinessId businessId, UUID customerId) {
+        return 0;
+    }
+
+    default List<PushSubscriptionRecord> listActivePushSubscriptions(BusinessId businessId, UUID customerId) {
+        return List.of();
+    }
+
+    default void recordPushDelivery(UUID subscriptionId, Instant now) {
+        throw new UnsupportedOperationException("push subscriptions are not available");
+    }
+
+    default void revokePushSubscription(UUID subscriptionId, Instant now) {
+        throw new UnsupportedOperationException("push subscriptions are not available");
+    }
+
+    default void revokePushSubscriptionByEndpoint(BusinessId businessId, UUID channelId,
+            UUID customerId, String endpoint, Instant now) {
+        throw new UnsupportedOperationException("push subscriptions are not available");
+    }
+
+    default void enqueuePushNotification(UUID id, BusinessId businessId, UUID customerId,
+            UUID activityId, String kind, Instant createdAt) {
+        throw new UnsupportedOperationException("push notifications are not available");
+    }
+
+    default List<PushNotificationRecord> findDuePushNotifications(Instant now, int limit) {
+        return List.of();
+    }
+
+    default boolean claimPushNotification(UUID id, Instant now, Instant lockedUntil) {
+        return false;
+    }
+
+    default void markPushNotificationDelivered(UUID id, Instant deliveredAt) {
+        throw new UnsupportedOperationException("push notifications are not available");
+    }
+
+    default void retryPushNotification(UUID id, Instant availableAt, String error) {
+        throw new UnsupportedOperationException("push notifications are not available");
+    }
+
     record ChannelRecord(UUID id, BusinessId businessId, UUID customerId,
             CustomerChannelStatus status, Instant activatedAt, Instant lastAccessAt) {}
 
@@ -77,4 +124,10 @@ public interface CustomerChannelRepository {
 
     record ActivityRecord(UUID id, String type, String impact, BigDecimal amount,
             String currency, String label, Instant occurredAt) {}
+
+    record PushSubscriptionRecord(UUID id, UUID channelId, UUID customerId, String endpoint,
+            String p256dhKey, String authKey) {}
+
+    record PushNotificationRecord(UUID id, BusinessId businessId, UUID customerId, UUID activityId,
+            String kind, Instant createdAt, int attempts) {}
 }

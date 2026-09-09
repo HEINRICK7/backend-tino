@@ -6,6 +6,7 @@ import com.tino.backend.credit.application.exception.CreditCustomerNotFoundExcep
 import com.tino.backend.credit.application.exception.CreditInsufficientBalanceException;
 import com.tino.backend.credit.application.model.CreditOperationResult;
 import com.tino.backend.credit.application.port.out.CreditRepository;
+import com.tino.backend.credit.application.port.out.customer.CustomerUpdateNotificationPort;
 import com.tino.backend.credit.domain.model.CreditAmount;
 import com.tino.backend.credit.domain.model.CreditDirection;
 import com.tino.backend.credit.domain.model.CreditLedgerEntry;
@@ -23,13 +24,20 @@ public final class AppendCreditEntry {
     private final CreditRepository credits;
     private final UuidGenerator ids;
     private final Clock clock;
+    private final CustomerUpdateNotificationPort customerUpdates;
 
     public AppendCreditEntry(BusinessAuthorization authorization, CreditRepository credits,
             UuidGenerator ids, Clock clock) {
+        this(authorization, credits, ids, clock, update -> { });
+    }
+
+    public AppendCreditEntry(BusinessAuthorization authorization, CreditRepository credits,
+            UuidGenerator ids, Clock clock, CustomerUpdateNotificationPort customerUpdates) {
         this.authorization = Objects.requireNonNull(authorization, "authorization");
         this.credits = Objects.requireNonNull(credits, "credits");
         this.ids = Objects.requireNonNull(ids, "ids");
         this.clock = Objects.requireNonNull(clock, "clock");
+        this.customerUpdates = Objects.requireNonNull(customerUpdates, "customerUpdates");
     }
 
     public CreditOperationResult execute(UUID userId, BusinessId businessId, UUID customerId,
@@ -66,6 +74,8 @@ public final class AppendCreditEntry {
             var entry = new CreditLedgerEntry(entryId, authorizedBusiness, account.id(), customerId,
                     direction, creditAmount, reason, null, userId, now);
             credits.insertEntry(entry);
+            customerUpdates.enqueue(new CustomerUpdateNotificationPort.CustomerUpdate(
+                    authorizedBusiness, customerId, entry.id(), entry.direction().name(), entry.createdAt()));
             credits.insertAudit(new CreditRepository.AuditRecord(ids.next(), authorizedBusiness, OPERATION,
                     entry.id(), idempotencyKey, userId, fingerprint, now));
             var updated = credits.findAccountById(authorizedBusiness, account.id(), false).orElseThrow();

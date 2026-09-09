@@ -23,6 +23,8 @@ public final class CustomerChannelViews {
     public record Balance(long minor, String currency) {}
     public record Features(boolean push, boolean pix, boolean agreements) {}
     public record Push(int activeSubscriptions) {}
+    public record PushConfigResponse(boolean enabled, String vapidPublicKey) {}
+    public record PushSubscriptionResponse(UUID id, String status) {}
     public record ActivityPage(List<Activity> items, @JsonProperty("nextCursor") String nextCursor,
             @JsonProperty("asOf") Instant asOf) {}
     public record Activity(UUID id, String type, String impact, Amount amount, String label,
@@ -30,10 +32,23 @@ public final class CustomerChannelViews {
     public record Amount(long minor, String currency) {}
 
     public static HomeResponse home(CustomerChannelRepositoryHome home) {
+        return home(home, false, 0);
+    }
+
+    public static HomeResponse home(CustomerChannelRepositoryHome home, boolean pushEnabled,
+            int activeSubscriptions) {
         return new HomeResponse(new Channel(home.status().name()), new Customer(home.customerName()),
                 new Business(home.businessName()), new Account(home.accountStatus(),
                 new Balance(toMinor(home.balance()), home.currency()), home.version(), home.asOf()),
-                new Features(false, false, false), new Push(0));
+                new Features(pushEnabled, false, false), new Push(activeSubscriptions));
+    }
+
+    public static HomeResponse home(com.tino.backend.customerchannel.application.port.out.CustomerChannelRepository.HomeRecord home,
+            boolean pushEnabled, int activeSubscriptions) {
+        return new HomeResponse(new Channel(home.channelStatus().name()), new Customer(home.customerName()),
+                new Business(home.businessName()), new Account(home.accountStatus(),
+                new Balance(toMinor(home.balance()), home.currency()), home.version(), home.asOf()),
+                new Features(pushEnabled, false, false), new Push(activeSubscriptions));
     }
 
     public static Activity activity(com.tino.backend.customerchannel.application.port.out.CustomerChannelRepository.ActivityRecord item) {

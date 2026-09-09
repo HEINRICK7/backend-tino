@@ -51,6 +51,14 @@ tino:
     session:
       cookie-name: ${TINO_CUSTOMER_CHANNEL_SESSION_COOKIE:tino_customer_session}
       secure: ${TINO_CUSTOMER_CHANNEL_SESSION_SECURE:false}
+    push:
+      enabled: ${TINO_CUSTOMER_PUSH_ENABLED:false}
+      vapid-public-key: ${TINO_CUSTOMER_PUSH_VAPID_PUBLIC_KEY:}
+      vapid-private-key: ${TINO_CUSTOMER_PUSH_VAPID_PRIVATE_KEY:}
+      vapid-subject: ${TINO_CUSTOMER_PUSH_VAPID_SUBJECT:mailto:suporte@tino.otimizanegocio.com}
+      dispatch-interval-ms: ${TINO_CUSTOMER_PUSH_DISPATCH_INTERVAL_MS:5000}
+      dispatch-initial-delay-ms: ${TINO_CUSTOMER_PUSH_DISPATCH_INITIAL_DELAY_MS:10000}
+      dispatch-timeout-ms: ${TINO_CUSTOMER_PUSH_DISPATCH_TIMEOUT_MS:5000}
 server:
   shutdown: graceful
   error:

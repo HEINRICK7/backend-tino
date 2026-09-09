@@ -12,6 +12,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.jooq.DSLContext;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 @Repository
 public class JooqCustomerChannelRepository implements CustomerChannelRepository {
@@ -287,6 +288,157 @@ public class JooqCustomerChannelRepository implements CustomerChannelRepository 
     @Override
     public Optional<ActivityRecord> findActivity(BusinessId businessId, UUID customerId, UUID activityId) {
         return listActivityById(businessId, customerId, activityId);
+    }
+
+    @Override
+    @Transactional
+    public UUID upsertPushSubscription(UUID id, BusinessId businessId, UUID channelId,
+            UUID customerId, String endpoint, String p256dhKey, String authKey, Instant now) {
+        var row = dsl.fetchOne("""
+                INSERT INTO public.customer_push_subscriptions
+                    (id, business_id, customer_channel_id, customer_id, endpoint,
+                     p256dh_key, auth_key, created_at, updated_at, revoked_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, CAST(? AS TIMESTAMPTZ), CAST(? AS TIMESTAMPTZ), NULL)
+                ON CONFLICT (business_id, customer_channel_id, endpoint)
+                DO UPDATE SET customer_id = EXCLUDED.customer_id,
+                              p256dh_key = EXCLUDED.p256dh_key,
+                              auth_key = EXCLUDED.auth_key,
+                              updated_at = EXCLUDED.updated_at,
+                              revoked_at = NULL
+                RETURNING id
+                """, id, businessId.value(), channelId, customerId, endpoint, p256dhKey, authKey,
+                time(now), time(now));
+        if (row == null) throw new IllegalStateException("push subscription upsert returned no id");
+        return row.get("id", UUID.class);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public int countActivePushSubscriptions(BusinessId businessId, UUID customerId) {
+        var value = dsl.fetchOne("""
+                SELECT count(*) AS total
+                  FROM public.customer_push_subscriptions
+                 WHERE business_id = ? AND customer_id = ? AND revoked_at IS NULL
+                """, businessId.value(), customerId);
+        return value == null ? 0 : Math.toIntExact(value.get("total", Long.class));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<PushSubscriptionRecord> listActivePushSubscriptions(
+            BusinessId businessId, UUID customerId) {
+        return dsl.fetch("""
+                SELECT id, customer_channel_id, customer_id, endpoint, p256dh_key, auth_key
+                  FROM public.customer_push_subscriptions
+                 WHERE business_id = ? AND customer_id = ? AND revoked_at IS NULL
+                 ORDER BY created_at, id
+                """, businessId.value(), customerId).map(row -> new PushSubscriptionRecord(
+                row.get("id", UUID.class), row.get("customer_channel_id", UUID.class),
+                row.get("customer_id", UUID.class), row.get("endpoint", String.class),
+                row.get("p256dh_key", String.class), row.get("auth_key", String.class)));
+    }
+
+    @Override
+    @Transactional
+    public void recordPushDelivery(UUID subscriptionId, Instant now) {
+        dsl.execute("""
+                UPDATE public.customer_push_subscriptions
+                   SET last_success_at = CAST(? AS TIMESTAMPTZ), updated_at = CAST(? AS TIMESTAMPTZ)
+                 WHERE id = ? AND revoked_at IS NULL
+                """, time(now), time(now), subscriptionId);
+    }
+
+    @Override
+    @Transactional
+    public void revokePushSubscription(UUID subscriptionId, Instant now) {
+        dsl.execute("""
+                UPDATE public.customer_push_subscriptions
+                   SET revoked_at = CAST(? AS TIMESTAMPTZ), updated_at = CAST(? AS TIMESTAMPTZ)
+                 WHERE id = ? AND revoked_at IS NULL
+                """, time(now), time(now), subscriptionId);
+    }
+
+    @Override
+    @Transactional
+    public void revokePushSubscriptionByEndpoint(BusinessId businessId, UUID channelId,
+            UUID customerId, String endpoint, Instant now) {
+        dsl.execute("""
+                UPDATE public.customer_push_subscriptions
+                   SET revoked_at = CAST(? AS TIMESTAMPTZ), updated_at = CAST(? AS TIMESTAMPTZ)
+                 WHERE business_id = ? AND customer_channel_id = ? AND customer_id = ?
+                   AND endpoint = ? AND revoked_at IS NULL
+                """, time(now), time(now), businessId.value(), channelId, customerId, endpoint);
+    }
+
+    @Override
+    @Transactional
+    public void enqueuePushNotification(UUID id, BusinessId businessId, UUID customerId,
+            UUID activityId, String kind, Instant createdAt) {
+        dsl.execute("""
+                INSERT INTO public.customer_push_outbox
+                    (id, business_id, customer_id, activity_id, kind, created_at, available_at)
+                VALUES (?, ?, ?, ?, ?, CAST(? AS TIMESTAMPTZ), CAST(? AS TIMESTAMPTZ))
+                ON CONFLICT (business_id, activity_id) DO NOTHING
+                """, id, businessId.value(), customerId, activityId,
+                kind, time(createdAt), time(createdAt));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<PushNotificationRecord> findDuePushNotifications(Instant now, int limit) {
+        enablePushDispatcherContext();
+        return dsl.fetch("""
+                SELECT id, business_id, customer_id, activity_id, kind, created_at, attempts
+                  FROM public.customer_push_outbox
+                 WHERE delivered_at IS NULL
+                   AND available_at <= CAST(? AS TIMESTAMPTZ)
+                   AND (locked_until IS NULL OR locked_until < CAST(? AS TIMESTAMPTZ))
+                 ORDER BY available_at, created_at, id
+                 LIMIT ?
+                """, time(now), time(now), limit).map(row -> new PushNotificationRecord(
+                row.get("id", UUID.class), new BusinessId(row.get("business_id", UUID.class)),
+                row.get("customer_id", UUID.class), row.get("activity_id", UUID.class),
+                row.get("kind", String.class), instant(row.get("created_at", OffsetDateTime.class)),
+                row.get("attempts", Integer.class)));
+    }
+
+    @Override
+    @Transactional
+    public boolean claimPushNotification(UUID id, Instant now, Instant lockedUntil) {
+        enablePushDispatcherContext();
+        return dsl.execute("""
+                UPDATE public.customer_push_outbox
+                   SET locked_until = CAST(? AS TIMESTAMPTZ)
+                 WHERE id = ? AND delivered_at IS NULL
+                   AND (locked_until IS NULL OR locked_until < CAST(? AS TIMESTAMPTZ))
+                """, time(lockedUntil), id, time(now)) == 1;
+    }
+
+    @Override
+    @Transactional
+    public void markPushNotificationDelivered(UUID id, Instant deliveredAt) {
+        enablePushDispatcherContext();
+        dsl.execute("""
+                UPDATE public.customer_push_outbox
+                   SET delivered_at = CAST(? AS TIMESTAMPTZ), locked_until = NULL, last_error = NULL
+                 WHERE id = ? AND delivered_at IS NULL
+                """, time(deliveredAt), id);
+    }
+
+    @Override
+    @Transactional
+    public void retryPushNotification(UUID id, Instant availableAt, String error) {
+        enablePushDispatcherContext();
+        dsl.execute("""
+                UPDATE public.customer_push_outbox
+                   SET attempts = attempts + 1, available_at = CAST(? AS TIMESTAMPTZ),
+                       locked_until = NULL, last_error = ?
+                 WHERE id = ? AND delivered_at IS NULL
+                """, time(availableAt), error, id);
+    }
+
+    private void enablePushDispatcherContext() {
+        dsl.execute("SELECT set_config('app.push_dispatcher', 'true', true)");
     }
 
     private Optional<ActivityRecord> listActivityById(BusinessId businessId, UUID customerId, UUID activityId) {

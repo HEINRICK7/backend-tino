@@ -7,6 +7,8 @@ import com.tino.backend.customerchannel.application.exception.CustomerInviteInva
 import com.tino.backend.customerchannel.application.exception.CustomerInvitePhoneMissingException;
 import com.tino.backend.customerchannel.application.exception.CustomerInvitePhoneInvalidException;
 import com.tino.backend.customerchannel.application.exception.CustomerSessionRequiredException;
+import com.tino.backend.customerchannel.application.exception.CustomerPushDisabledException;
+import com.tino.backend.customerchannel.application.exception.CustomerPushSubscriptionInvalidException;
 import com.tino.backend.business.application.port.in.BusinessAuthorizationDeniedException;
 import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
@@ -56,6 +58,16 @@ public final class CustomerChannelApiExceptionHandler {
     ResponseEntity<ErrorResponse> activationIdempotencyConflict(RuntimeException exception) {
         return response(HttpStatus.CONFLICT, "ACTIVATION_IDEMPOTENCY_CONFLICT",
                 "Idempotency-Key was already used for another customer-channel activation");
+    }
+
+    @ExceptionHandler(CustomerPushDisabledException.class)
+    ResponseEntity<ErrorResponse> pushDisabled(RuntimeException exception) {
+        return response(HttpStatus.NOT_FOUND, "PUSH_DISABLED", "customer push is not enabled");
+    }
+
+    @ExceptionHandler(CustomerPushSubscriptionInvalidException.class)
+    ResponseEntity<ErrorResponse> invalidPushSubscription(RuntimeException exception) {
+        return response(HttpStatus.BAD_REQUEST, "PUSH_SUBSCRIPTION_INVALID", "push subscription is invalid");
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
