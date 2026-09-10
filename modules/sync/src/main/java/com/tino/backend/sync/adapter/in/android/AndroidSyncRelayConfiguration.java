@@ -29,6 +29,7 @@ public class AndroidSyncRelayConfiguration {
             "credit.sale.reversed",
             "credit.adjustment.reversed",
             "credit.entry.disputed",
+            "credit.entry.dispute.reversed",
             "credit.settled",
             "credit.settled.reversed",
             "purchase.created",
@@ -59,6 +60,7 @@ public class AndroidSyncRelayConfiguration {
     @Bean SyncEventHandler creditSaleReversedRelay() { return relay("credit.sale.reversed"); }
     @Bean SyncEventHandler creditAdjustmentReversedRelay() { return relay("credit.adjustment.reversed"); }
     @Bean SyncEventHandler creditEntryDisputedRelay() { return relay("credit.entry.disputed"); }
+    @Bean SyncEventHandler creditEntryDisputeReversedRelay() { return relay("credit.entry.dispute.reversed"); }
     @Bean SyncEventHandler creditSettledRelay() { return relay("credit.settled"); }
     @Bean SyncEventHandler creditSettledReversedRelay() { return relay("credit.settled.reversed"); }
     @Bean SyncEventHandler purchaseCreatedRelay() { return relay("purchase.created"); }
