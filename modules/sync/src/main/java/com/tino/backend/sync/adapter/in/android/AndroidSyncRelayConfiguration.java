@@ -22,11 +22,15 @@ public class AndroidSyncRelayConfiguration {
             "payment.agreement.created",
             "credit.sale.created",
             "credit.receivable.created",
+            "credit.receivable.reversed",
             "credit.payment.received",
             "credit.payment.reversed",
             "credit.adjustment.created",
+            "credit.sale.reversed",
+            "credit.adjustment.reversed",
             "credit.entry.disputed",
             "credit.settled",
+            "credit.settled.reversed",
             "purchase.created",
             "purchase.ordered",
             "purchase.received",
@@ -48,11 +52,15 @@ public class AndroidSyncRelayConfiguration {
     @Bean SyncEventHandler paymentAgreementCreatedRelay() { return relay("payment.agreement.created"); }
     @Bean SyncEventHandler creditSaleCreatedRelay() { return relay("credit.sale.created"); }
     @Bean SyncEventHandler creditReceivableCreatedRelay() { return relay("credit.receivable.created"); }
+    @Bean SyncEventHandler creditReceivableReversedRelay() { return relay("credit.receivable.reversed"); }
     @Bean SyncEventHandler creditPaymentReceivedRelay() { return relay("credit.payment.received"); }
     @Bean SyncEventHandler creditPaymentReversedRelay() { return relay("credit.payment.reversed"); }
     @Bean SyncEventHandler creditAdjustmentCreatedRelay() { return relay("credit.adjustment.created"); }
+    @Bean SyncEventHandler creditSaleReversedRelay() { return relay("credit.sale.reversed"); }
+    @Bean SyncEventHandler creditAdjustmentReversedRelay() { return relay("credit.adjustment.reversed"); }
     @Bean SyncEventHandler creditEntryDisputedRelay() { return relay("credit.entry.disputed"); }
     @Bean SyncEventHandler creditSettledRelay() { return relay("credit.settled"); }
+    @Bean SyncEventHandler creditSettledReversedRelay() { return relay("credit.settled.reversed"); }
     @Bean SyncEventHandler purchaseCreatedRelay() { return relay("purchase.created"); }
     @Bean SyncEventHandler purchaseOrderedRelay() { return relay("purchase.ordered"); }
     @Bean SyncEventHandler purchaseReceivedRelay() { return relay("purchase.received"); }

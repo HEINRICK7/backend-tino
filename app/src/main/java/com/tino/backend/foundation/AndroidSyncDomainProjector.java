@@ -56,6 +56,8 @@ public final class AndroidSyncDomainProjector implements SyncEventProjector {
                 case CUSTOMER_UPDATED -> updateCustomer(businessId, event, payload);
                 case "credit.receivable.created", "credit.sale.created" -> appendCredit(
                         authenticatedUserId, businessId, event, payload, CreditDirection.CREDIT, false);
+                case "credit.receivable.reversed" -> appendCredit(
+                        authenticatedUserId, businessId, event, payload, null, true);
                 case "credit.payment.received", "credit.settled" -> appendCredit(
                         authenticatedUserId, businessId, event, payload, CreditDirection.DEBIT, false);
                 case "credit.sale.reversed", "credit.settled.reversed" -> appendCredit(
@@ -156,6 +158,7 @@ public final class AndroidSyncDomainProjector implements SyncEventProjector {
         return switch (eventType) {
             case CUSTOMER_CREATED, CUSTOMER_UPDATED,
                     "credit.receivable.created", "credit.sale.created",
+                    "credit.receivable.reversed",
                     "credit.payment.received", "credit.settled",
                     "credit.sale.reversed", "credit.payment.reversed",
                     "credit.adjustment.created", "credit.adjustment.reversed",
