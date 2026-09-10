@@ -8,7 +8,7 @@ import java.util.Optional;
 public interface BusinessPixReader {
     Optional<PixView> read(BusinessId businessId);
 
-    /** Returns the customer-facing code with the current amount when positive. */
+    /** Returns the code with the current amount when positive. */
     Optional<PixView> readForAmount(BusinessId businessId, BigDecimal amount);
 
     record PixView(boolean enabled, String key, String copyPaste) {
