@@ -1,12 +1,15 @@
 package com.tino.backend.business.application.port.in;
 
 import com.tino.backend.shared.kernel.BusinessId;
+import java.math.BigDecimal;
 import java.util.Optional;
 
 /** Read-only contract for tenant-bound downstream channels. */
-@FunctionalInterface
 public interface BusinessPixReader {
     Optional<PixView> read(BusinessId businessId);
+
+    /** Returns the customer-facing code with the current amount when positive. */
+    Optional<PixView> readForAmount(BusinessId businessId, BigDecimal amount);
 
     record PixView(boolean enabled, String key, String copyPaste) {
         public PixView {

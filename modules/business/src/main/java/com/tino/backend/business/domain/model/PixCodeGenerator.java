@@ -1,13 +1,19 @@
 package com.tino.backend.business.domain.model;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.text.Normalizer;
 import java.util.Locale;
 
-/** Generates the static Pix BR Code (EMV payload), including CRC16-CCITT. */
+/** Generates a Pix BR Code (EMV payload), including CRC16-CCITT. */
 public final class PixCodeGenerator {
     private PixCodeGenerator() {}
 
     public static String generate(PixKey key, String merchantName, String merchantCity) {
+        return generate(key, merchantName, merchantCity, null);
+    }
+
+    public static String generate(PixKey key, String merchantName, String merchantCity, BigDecimal amount) {
         var normalizedName = merchantField(merchantName, 25, "merchant name");
         var normalizedCity = merchantField(merchantCity, 15, "merchant city");
         var merchantAccount = field("00", "br.gov.bcb.pix")
@@ -16,12 +22,20 @@ public final class PixCodeGenerator {
                 + field("26", merchantAccount)
                 + field("52", "0000")
                 + field("53", "986")
+                + amountField(amount)
                 + field("58", "BR")
                 + field("59", normalizedName)
                 + field("60", normalizedCity)
                 + field("62", field("05", "***"))
                 + "6304";
         return payload + crc16(payload);
+    }
+
+    private static String amountField(BigDecimal amount) {
+        if (amount == null || amount.signum() == 0) return "";
+        if (amount.signum() < 0) throw new IllegalArgumentException("Pix amount cannot be negative");
+        var normalized = amount.setScale(2, RoundingMode.UNNECESSARY).toPlainString();
+        return field("54", normalized);
     }
 
     public static String merchantField(String value, int maxLength, String label) {

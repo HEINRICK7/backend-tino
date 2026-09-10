@@ -2,6 +2,7 @@ package com.tino.backend.business.domain.model;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 
@@ -19,6 +20,17 @@ class PixCodeGeneratorTest {
         assertThat(payload).contains("6009FORTALEZA");
         assertThat(payload).contains("62070503***6304");
         assertThat(payload).doesNotContain("540");
+        assertThat(payload.substring(payload.length() - 4)).isEqualTo(crc16(payload.substring(0, payload.length() - 4)));
+    }
+
+    @Test
+    void generatesAmountFieldForCustomerPaymentAndValidCrc() {
+        var payload = PixCodeGenerator.generate(
+                PixKey.parse("7e5b2c1a-5c7d-4a4d-8d86-1f4bd4e1c2aa"),
+                "Mercadinho João", "Fortaleza", new BigDecimal("693.50"));
+
+        assertThat(payload).contains("5406693.50");
+        assertThat(payload).contains("5406693.505802BR");
         assertThat(payload.substring(payload.length() - 4)).isEqualTo(crc16(payload.substring(0, payload.length() - 4)));
     }
 

@@ -41,6 +41,17 @@ public class CustomerChannelService {
     private static final String DELIVERY_KEY_PREFIX = "customer-channel-invite-";
     private static final Duration INVITE_TTL = Duration.ofMinutes(15);
     private static final Duration SESSION_TTL = Duration.ofDays(30);
+    private static final BusinessPixReader EMPTY_PIX_READER = new BusinessPixReader() {
+        @Override
+        public Optional<BusinessPixReader.PixView> read(BusinessId businessId) {
+            return Optional.empty();
+        }
+
+        @Override
+        public Optional<BusinessPixReader.PixView> readForAmount(BusinessId businessId, BigDecimal amount) {
+            return Optional.empty();
+        }
+    };
 
     private final BusinessAuthorization authorization;
     private final CustomerRepository customers;
@@ -58,7 +69,7 @@ public class CustomerChannelService {
             UuidGenerator ids, Clock clock, TenantContextExecutor tenants,
             @Value("${tino.customer-channel.public-base-url:http://localhost:5173}") String publicBaseUrl) {
         this(authorization, customers, channels, inviteDelivery, ids, clock, tenants, publicBaseUrl,
-                CustomerPushSettings.disabled(), businessId -> Optional.empty());
+                CustomerPushSettings.disabled(), EMPTY_PIX_READER);
     }
 
     public CustomerChannelService(BusinessAuthorization authorization, CustomerRepository customers,
@@ -66,7 +77,7 @@ public class CustomerChannelService {
             UuidGenerator ids, Clock clock, TenantContextExecutor tenants, String publicBaseUrl,
             CustomerPushSettings pushSettings) {
         this(authorization, customers, channels, inviteDelivery, ids, clock, tenants, publicBaseUrl,
-                pushSettings, businessId -> Optional.empty());
+                pushSettings, EMPTY_PIX_READER);
     }
 
     public CustomerChannelService(BusinessAuthorization authorization, CustomerRepository customers,
@@ -354,7 +365,7 @@ public class CustomerChannelService {
         });
         var activeSubscriptions = tenants.execute(businessId,
                 () -> channels.countActivePushSubscriptions(businessId, principal.customerId()));
-        var pix = tenants.execute(businessId, () -> pixReader.read(businessId));
+        var pix = tenants.execute(businessId, () -> pixReader.readForAmount(businessId, home.balance()));
         return CustomerChannelViews.home(home, pushSettings.enabled(), activeSubscriptions, pix);
     }
 

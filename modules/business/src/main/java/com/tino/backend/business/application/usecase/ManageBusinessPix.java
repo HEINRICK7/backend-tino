@@ -11,6 +11,7 @@ import com.tino.backend.business.domain.model.BusinessStatus;
 import com.tino.backend.business.domain.model.PixCodeGenerator;
 import com.tino.backend.business.domain.model.PixKey;
 import com.tino.backend.shared.kernel.BusinessId;
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Objects;
@@ -70,12 +71,23 @@ public final class ManageBusinessPix implements BusinessPixReader {
 
     @Override
     public Optional<BusinessPixReader.PixView> read(BusinessId businessId) {
+        return readForAmount(businessId, null);
+    }
+
+    @Override
+    public Optional<BusinessPixReader.PixView> readForAmount(BusinessId businessId, BigDecimal amount) {
         try {
             return configurations.find(businessId)
-                    .map(configuration -> new BusinessPixReader.PixView(
-                            configuration.enabled(), configuration.key().value(), configuration.copyPaste()));
+                    .map(configuration -> new BusinessPixReader.PixView(configuration.enabled(),
+                            configuration.key().value(), copyPaste(configuration, amount)));
         } catch (BusinessPixPersistenceException exception) {
             throw new BusinessPixUnavailableException(exception);
         }
+    }
+
+    private static String copyPaste(BusinessPixConfiguration configuration, BigDecimal amount) {
+        if (amount == null || amount.signum() <= 0) return configuration.copyPaste();
+        return PixCodeGenerator.generate(configuration.key(), configuration.merchantName(),
+                configuration.merchantCity(), amount);
     }
 }
