@@ -76,18 +76,27 @@ public final class ManageBusinessPix implements BusinessPixReader {
 
     @Override
     public Optional<BusinessPixReader.PixView> readForAmount(BusinessId businessId, BigDecimal amount) {
+        return readForAmountAndTxid(businessId, amount, null);
+    }
+
+    @Override
+    public Optional<BusinessPixReader.PixView> readForAmountAndTxid(
+            BusinessId businessId, BigDecimal amount, String txid) {
         try {
             return configurations.find(businessId)
                     .map(configuration -> new BusinessPixReader.PixView(configuration.enabled(),
-                            configuration.key().value(), copyPaste(configuration, amount)));
+                            configuration.key().value(), copyPaste(configuration, amount, txid)));
         } catch (BusinessPixPersistenceException exception) {
             throw new BusinessPixUnavailableException(exception);
         }
     }
 
-    private static String copyPaste(BusinessPixConfiguration configuration, BigDecimal amount) {
-        if (amount == null || amount.signum() <= 0) return configuration.copyPaste();
+    private static String copyPaste(BusinessPixConfiguration configuration, BigDecimal amount, String txid) {
+        if (amount == null || amount.signum() <= 0) {
+            if (txid == null || txid.isBlank()) return configuration.copyPaste();
+            throw new IllegalArgumentException("Pix txid requires a positive amount");
+        }
         return PixCodeGenerator.generate(configuration.key(), configuration.merchantName(),
-                configuration.merchantCity(), amount);
+                configuration.merchantCity(), amount, txid);
     }
 }

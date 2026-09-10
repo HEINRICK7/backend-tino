@@ -11,6 +11,11 @@ public interface BusinessPixReader {
     /** Returns the code with the current amount when positive. */
     Optional<PixView> readForAmount(BusinessId businessId, BigDecimal amount);
 
+    /** Returns an amount-bound code with the supplied opaque transaction id. */
+    default Optional<PixView> readForAmountAndTxid(BusinessId businessId, BigDecimal amount, String txid) {
+        return readForAmount(businessId, amount);
+    }
+
     record PixView(boolean enabled, String key, String copyPaste) {
         public PixView {
             if (key == null || key.isBlank()) {

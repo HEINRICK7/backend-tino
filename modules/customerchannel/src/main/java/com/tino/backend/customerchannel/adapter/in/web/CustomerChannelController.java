@@ -4,6 +4,8 @@ import com.tino.backend.customerchannel.application.exception.CustomerSessionReq
 import com.tino.backend.customerchannel.application.model.CustomerChannelViews;
 import com.tino.backend.customerchannel.application.port.in.CustomerChannelPrincipal;
 import com.tino.backend.customerchannel.application.service.CustomerChannelService;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.tino.backend.payment.application.port.in.CustomerPaymentIntentCreator;
 import com.tino.backend.identity.application.exception.DisabledUserException;
 import com.tino.backend.identity.application.exception.InvalidAuthenticatedPrincipalException;
 import com.tino.backend.identity.application.port.in.AuthenticatedPrincipal;
@@ -33,14 +35,17 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1")
 public final class CustomerChannelController {
     private final CustomerChannelService channels;
+    private final CustomerPaymentIntentCreator createDebtPaymentIntent;
     private final AuthenticatedUserResolver users;
     private final String cookieName;
     private final boolean secureCookie;
 
-    public CustomerChannelController(CustomerChannelService channels, AuthenticatedUserResolver users,
+    public CustomerChannelController(CustomerChannelService channels, CustomerPaymentIntentCreator createDebtPaymentIntent,
+            AuthenticatedUserResolver users,
             @Value("${tino.customer-channel.session.cookie-name:tino_customer_session}") String cookieName,
             @Value("${tino.customer-channel.session.secure:true}") boolean secureCookie) {
         this.channels = channels;
+        this.createDebtPaymentIntent = createDebtPaymentIntent;
         this.users = users;
         this.cookieName = cookieName;
         this.secureCookie = secureCookie;
@@ -98,6 +103,26 @@ public final class CustomerChannelController {
             @PathVariable UUID activityId) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
                 .body(channels.activity(requireCustomer(principal), activityId));
+    }
+
+    @PostMapping("/me/payment-intents")
+    public ResponseEntity<DebtPaymentIntentResponse> createPaymentIntent(
+            @AuthenticationPrincipal CustomerChannelPrincipal principal,
+            @RequestHeader(name = "Idempotency-Key", required = true) String idempotencyKey,
+            @RequestBody PaymentIntentRequest request) {
+        var customer = requireCustomer(principal);
+        if (request == null || request.amountMinor() == null || request.amountMinor() <= 0) {
+            throw new IllegalArgumentException("amount_minor must be positive");
+        }
+        var amount = java.math.BigDecimal.valueOf(request.amountMinor(), 2);
+        var fingerprint = digest(request.amountMinor().toString());
+        var result = createDebtPaymentIntent.execute(new BusinessId(customer.businessId()),
+                customer.customerId(), amount, idempotencyKey, fingerprint);
+        return ResponseEntity.status(result.replayed() ? HttpStatus.OK : HttpStatus.CREATED)
+                .body(new DebtPaymentIntentResponse(new PaymentIntentPayload(result.id(), result.customerId(),
+                        result.amountMinor(), result.currency(), result.pixTxid(), result.pixKey(),
+                        result.copyPaste(), result.status(), result.createdAt(), result.expiresAt(),
+                        result.updatedAt()), result.replayed()));
     }
 
     @GetMapping("/me/push-config")
@@ -165,4 +190,23 @@ public final class CustomerChannelController {
     public record PushSubscriptionKeys(String p256dh, String auth) {}
 
     public record PushSubscriptionDeleteRequest(String endpoint) {}
+
+    public record PaymentIntentRequest(@JsonProperty("amount_minor") Long amountMinor) {}
+
+    public record DebtPaymentIntentResponse(
+            PaymentIntentPayload paymentIntent, boolean replayed) {}
+
+    public record PaymentIntentPayload(
+            UUID id, UUID customerId, long amountMinor, String currency, String pixTxid,
+            String pixKey, String copyPaste, String status, java.time.Instant createdAt,
+            java.time.Instant expiresAt, java.time.Instant updatedAt) {}
+
+    private static String digest(String value) {
+        try {
+            return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is unavailable", exception);
+        }
+    }
 }

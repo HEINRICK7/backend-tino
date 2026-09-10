@@ -34,6 +34,18 @@ class PixCodeGeneratorTest {
         assertThat(payload.substring(payload.length() - 4)).isEqualTo(crc16(payload.substring(0, payload.length() - 4)));
     }
 
+    @Test
+    void bindsAnOpaqueTxidToTheAdditionalDataField() {
+        var payload = PixCodeGenerator.generate(
+                PixKey.parse("7e5b2c1a-5c7d-4a4d-8d86-1f4bd4e1c2aa"),
+                "Mercadinho João", "Fortaleza", new BigDecimal("50.00"), "TINO7F4K92M1");
+
+        assertThat(payload).contains("62160512TINO7F4K92M1");
+        assertThat(payload).doesNotContain("62070503***");
+        assertThat(payload.substring(payload.length() - 4))
+                .isEqualTo(crc16(payload.substring(0, payload.length() - 4)));
+    }
+
     private static String crc16(String value) {
         var crc = 0xFFFF;
         for (var current : value.getBytes(StandardCharsets.US_ASCII)) {

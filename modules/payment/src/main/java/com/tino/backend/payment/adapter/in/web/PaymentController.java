@@ -8,6 +8,9 @@ import com.tino.backend.payment.application.exception.PaymentUnauthenticatedExce
 import com.tino.backend.payment.application.exception.PaymentWebhookUnauthorizedException;
 import com.tino.backend.payment.application.model.PaymentCommandResult;
 import com.tino.backend.payment.application.model.PaymentView;
+import com.tino.backend.payment.application.port.in.CustomerPaymentEvidenceReceiver;
+import com.tino.backend.payment.application.port.in.MerchantPaymentIntentConfirmer;
+import com.tino.backend.payment.application.port.in.MerchantPaymentEvidenceReader;
 import com.tino.backend.payment.application.port.out.PaymentProvider;
 import com.tino.backend.payment.application.usecase.CreatePayment;
 import com.tino.backend.payment.application.usecase.GetPayment;
@@ -18,6 +21,7 @@ import com.tino.backend.shared.kernel.BusinessId;
 import com.tino.backend.shared.kernel.TenantContextExecutor;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Instant;
 import java.util.HexFormat;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
@@ -28,6 +32,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import tools.jackson.databind.JsonNode;
 
@@ -41,10 +46,15 @@ public final class PaymentController {
     private final IngestPaymentWebhook ingestWebhook;
     private final PaymentProvider provider;
     private final TenantContextExecutor tenantContext;
+    private final CustomerPaymentEvidenceReceiver receiveEvidence;
+    private final MerchantPaymentIntentConfirmer confirmIntent;
+    private final MerchantPaymentEvidenceReader readEvidence;
 
     public PaymentController(AuthenticatedUserResolver authenticatedUsers, CreatePayment createPayment,
             GetPayment getPayment, ProcessPayment processPayment, IngestPaymentWebhook ingestWebhook,
-            PaymentProvider provider, TenantContextExecutor tenantContext) {
+            PaymentProvider provider, TenantContextExecutor tenantContext,
+            CustomerPaymentEvidenceReceiver receiveEvidence, MerchantPaymentIntentConfirmer confirmIntent,
+            MerchantPaymentEvidenceReader readEvidence) {
         this.authenticatedUsers = authenticatedUsers;
         this.createPayment = createPayment;
         this.getPayment = getPayment;
@@ -52,6 +62,9 @@ public final class PaymentController {
         this.ingestWebhook = ingestWebhook;
         this.provider = provider;
         this.tenantContext = tenantContext;
+        this.receiveEvidence = receiveEvidence;
+        this.confirmIntent = confirmIntent;
+        this.readEvidence = readEvidence;
     }
 
     @PostMapping("/customers/{customerId}/payments")
@@ -65,6 +78,49 @@ public final class PaymentController {
         var result = createPayment.execute(user.userId(), new BusinessId(businessId), customerId,
                 amount, reference, idempotencyKey, fingerprint(request));
         return ResponseEntity.status(result.replayed() ? 200 : 201).body(toResponse(result));
+    }
+
+    @PostMapping("/payment-evidence")
+    public ResponseEntity<PaymentEvidenceResponse> receiveEvidence(
+            @AuthenticationPrincipal AuthenticatedPrincipal principal,
+            @PathVariable UUID businessId,
+            @RequestHeader(name = "Idempotency-Key") String idempotencyKey,
+            @RequestBody JsonNode request) {
+        var user = resolve(principal);
+        var amountMinor = integer(request, "amount_minor");
+        var paymentIntentId = optionalUuid(request, "payment_intent_id");
+        var result = receiveEvidence.execute(user.userId(), new BusinessId(businessId), paymentIntentId,
+                java.math.BigDecimal.valueOf(amountMinor, 2), text(request, "currency"),
+                optionalText(request, "pix_txid"), text(request, "source"),
+                text(request, "source_package"), text(request, "evidence_hash"),
+                instant(request, "occurred_at"), idempotencyKey, fingerprint(request));
+        return ResponseEntity.status(result.replayed() ? 200 : 201).body(
+                new PaymentEvidenceResponse(result.id(), result.paymentIntentId(), result.matchStatus(),
+                        result.replayed()));
+    }
+
+    @PostMapping("/payment-intents/{paymentIntentId}/confirm")
+    public ResponseEntity<PaymentConfirmationResponse> confirmIntent(
+            @AuthenticationPrincipal AuthenticatedPrincipal principal,
+            @PathVariable UUID businessId,
+            @PathVariable UUID paymentIntentId,
+            @RequestHeader(name = "Idempotency-Key") String idempotencyKey) {
+        var user = resolve(principal);
+        var result = confirmIntent.execute(user.userId(), new BusinessId(businessId), paymentIntentId,
+                idempotencyKey, digest("confirm:" + paymentIntentId));
+        return ResponseEntity.status(result.replayed() ? 200 : 201).body(new PaymentConfirmationResponse(
+                result.paymentIntentId(), result.customerId(), result.amountMinor(), result.creditEntryId(),
+                result.status(), result.replayed()));
+    }
+
+    @GetMapping("/payment-evidence")
+    public PaymentEvidenceQueueResponse reviewEvidence(
+            @AuthenticationPrincipal AuthenticatedPrincipal principal,
+            @PathVariable UUID businessId,
+            @RequestParam(defaultValue = "20") int limit) {
+        var user = resolve(principal);
+        var result = readEvidence.execute(user.userId(), new BusinessId(businessId), limit);
+        return new PaymentEvidenceQueueResponse(result.items());
     }
 
     @GetMapping("/payments/{paymentId}")
@@ -143,6 +199,32 @@ public final class PaymentController {
         return text(node, field);
     }
 
+    private static UUID optionalUuid(JsonNode node, String field) {
+        var value = optionalText(node, field);
+        if (value == null) return null;
+        try {
+            return UUID.fromString(value);
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalArgumentException(field + " must be UUID", exception);
+        }
+    }
+
+    private static long integer(JsonNode node, String field) {
+        var value = node == null ? null : node.get(field);
+        if (value == null || !value.isIntegralNumber() || value.longValue() <= 0) {
+            throw new IllegalArgumentException(field + " must be a positive integer");
+        }
+        return value.longValue();
+    }
+
+    private static Instant instant(JsonNode node, String field) {
+        try {
+            return Instant.parse(text(node, field));
+        } catch (java.time.format.DateTimeParseException exception) {
+            throw new IllegalArgumentException(field + " must be an ISO-8601 instant", exception);
+        }
+    }
+
     private static String text(JsonNode node, String field) {
         var value = node == null ? null : node.get(field);
         if (value == null || !value.isString() || value.stringValue().isBlank()) {
@@ -167,4 +249,12 @@ public final class PaymentController {
     }
 
     public record PaymentResponse(PaymentView payment, boolean replayed) {}
+
+    public record PaymentEvidenceResponse(UUID evidenceId, UUID paymentIntentId,
+            String matchStatus, boolean replayed) {}
+
+    public record PaymentConfirmationResponse(UUID paymentIntentId, UUID customerId, long amountMinor,
+            UUID creditEntryId, String status, boolean replayed) {}
+
+    public record PaymentEvidenceQueueResponse(java.util.List<MerchantPaymentEvidenceReader.Item> items) {}
 }

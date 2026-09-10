@@ -9,6 +9,8 @@ import com.tino.backend.payment.application.exception.PaymentProviderException;
 import com.tino.backend.payment.application.exception.PaymentTransitionException;
 import com.tino.backend.payment.application.exception.PaymentUnauthenticatedException;
 import com.tino.backend.payment.application.exception.PaymentWebhookUnauthorizedException;
+import com.tino.backend.payment.application.port.in.CustomerPaymentEvidenceReceiver;
+import com.tino.backend.payment.application.port.in.MerchantPaymentIntentConfirmer;
 import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -52,6 +54,19 @@ public final class PaymentApiExceptionHandler {
     @ExceptionHandler(PaymentPersistenceException.class)
     ResponseEntity<ErrorResponse> persistence(RuntimeException exception) {
         return response(HttpStatus.INTERNAL_SERVER_ERROR, "PAYMENT_OPERATION_FAILED", "payment operation failed");
+    }
+    @ExceptionHandler(CustomerPaymentEvidenceReceiver.IntentNotFoundException.class)
+    ResponseEntity<ErrorResponse> evidenceIntentNotFound(RuntimeException exception) {
+        return response(HttpStatus.NOT_FOUND, "PAYMENT_INTENT_NOT_FOUND", "payment intent not found");
+    }
+    @ExceptionHandler({CustomerPaymentEvidenceReceiver.ConflictException.class,
+            MerchantPaymentIntentConfirmer.ConflictException.class})
+    ResponseEntity<ErrorResponse> evidenceConflict(RuntimeException exception) {
+        return response(HttpStatus.CONFLICT, "PAYMENT_EVIDENCE_CONFLICT", "payment evidence conflicts with its current state");
+    }
+    @ExceptionHandler(MerchantPaymentIntentConfirmer.EvidenceRequiredException.class)
+    ResponseEntity<ErrorResponse> evidenceRequired(RuntimeException exception) {
+        return response(HttpStatus.CONFLICT, "PAYMENT_EVIDENCE_REQUIRED", "a matching payment evidence is required");
     }
     private static ResponseEntity<ErrorResponse> response(HttpStatus status, String code, String message) {
         return ResponseEntity.status(status).body(new ErrorResponse(code, message, MDC.get("correlationId")));

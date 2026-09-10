@@ -1,6 +1,8 @@
 package com.tino.backend.credit;
 
 import com.tino.backend.business.application.port.in.BusinessAuthorization;
+import com.tino.backend.credit.application.port.in.CreditBalanceReader;
+import com.tino.backend.credit.application.port.in.payment.CreditPaymentAppender;
 import com.tino.backend.credit.application.port.out.CreditRepository;
 import com.tino.backend.credit.application.port.out.customer.CustomerUpdateNotificationPort;
 import com.tino.backend.credit.application.usecase.AppendCreditEntry;
@@ -20,6 +22,15 @@ public class CreditConfiguration {
     }
 
     @Bean
+    CreditPaymentAppender creditPaymentAppender(AppendCreditEntry appendCreditEntry) {
+        return (userId, businessId, customerId, direction, amount, reason, idempotencyKey, fingerprint) -> {
+            var result = appendCreditEntry.execute(userId, businessId, customerId, direction, amount,
+                    reason, idempotencyKey, fingerprint);
+            return new CreditPaymentAppender.Result(result.entry().id(), result.replayed());
+        };
+    }
+
+    @Bean
     CompensateCreditEntry compensateCreditEntry(BusinessAuthorization authorization, CreditRepository credits,
             UuidGenerator ids, Clock clock, CustomerUpdateNotificationPort customerUpdates) {
         return new CompensateCreditEntry(authorization, credits, ids, clock, customerUpdates);
@@ -28,5 +39,11 @@ public class CreditConfiguration {
     @Bean
     GetCreditBalance getCreditBalance(BusinessAuthorization authorization, CreditRepository credits) {
         return new GetCreditBalance(authorization, credits);
+    }
+
+    @Bean
+    CreditBalanceReader creditBalanceReader(CreditRepository credits) {
+        return (businessId, customerId) -> credits.findAccount(businessId, customerId)
+                .map(account -> new CreditBalanceReader.Balance(account.balance(), account.version()));
     }
 }

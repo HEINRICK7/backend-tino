@@ -9,6 +9,7 @@ dependencies {
     implementation(project(":modules:identity"))
     implementation(project(":modules:customer"))
     implementation(project(":modules:credit"))
+    implementation(project(":modules:payment"))
     implementation(project(":modules:messaging"))
     implementation(libs.spring.context)
     implementation(libs.spring.tx)

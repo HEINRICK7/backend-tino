@@ -4,6 +4,7 @@ dependencies {
     api(platform(libs.spring.boot.dependencies))
     api(project(":shared:kernel"))
     implementation(project(":modules:business"))
+    implementation(project(":modules:credit"))
     implementation(project(":modules:identity"))
     implementation(libs.spring.context)
     implementation(libs.spring.tx)

@@ -11,6 +11,7 @@ import com.tino.backend.customerchannel.application.exception.CustomerPushDisabl
 import com.tino.backend.customerchannel.application.exception.CustomerPushSubscriptionInvalidException;
 import com.tino.backend.business.application.port.in.BusinessAuthorizationDeniedException;
 import com.tino.backend.business.application.port.in.BusinessPixUnavailableException;
+import com.tino.backend.payment.application.port.in.CustomerPaymentIntentCreator;
 import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -74,6 +75,22 @@ public final class CustomerChannelApiExceptionHandler {
     @ExceptionHandler(BusinessPixUnavailableException.class)
     ResponseEntity<ErrorResponse> pixUnavailable(RuntimeException exception) {
         return response(HttpStatus.INTERNAL_SERVER_ERROR, "PIX_UNAVAILABLE", "Pix is temporarily unavailable");
+    }
+
+    @ExceptionHandler(CustomerPaymentIntentCreator.PixUnavailableException.class)
+    ResponseEntity<ErrorResponse> paymentPixUnavailable(RuntimeException exception) {
+        return response(HttpStatus.SERVICE_UNAVAILABLE, "PIX_UNAVAILABLE", "Pix is temporarily unavailable");
+    }
+
+    @ExceptionHandler(CustomerPaymentIntentCreator.AmountExceedsBalanceException.class)
+    ResponseEntity<ErrorResponse> amountExceedsBalance(RuntimeException exception) {
+        return response(HttpStatus.CONFLICT, "PAYMENT_AMOUNT_EXCEEDS_BALANCE",
+                "payment amount exceeds the current caderneta balance");
+    }
+
+    @ExceptionHandler(CustomerPaymentIntentCreator.ConflictException.class)
+    ResponseEntity<ErrorResponse> paymentConflict(RuntimeException exception) {
+        return response(HttpStatus.CONFLICT, "PAYMENT_INTENT_CONFLICT", "payment intent request conflicts");
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

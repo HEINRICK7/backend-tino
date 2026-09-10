@@ -41,7 +41,7 @@ class BusinessUnderstandingPostgresTest {
     void migrateAndClear() throws Exception {
         flyway().migrate();
         try (var connection = migratorConnection(); var statement = connection.createStatement()) {
-            statement.execute("TRUNCATE TABLE public.business_item_purposes, public.business_operating_modes, public.business_activities");
+            statement.execute("TRUNCATE TABLE public.customer_payment_intent_confirmation_idempotency_keys, public.customer_payment_evidence_idempotency_keys, public.customer_payment_evidence, public.customer_payment_intent_idempotency_keys, public.customer_payment_intents, public.business_item_purposes, public.business_operating_modes, public.business_activities");
         }
     }
 

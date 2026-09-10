@@ -14,8 +14,15 @@ public final class PixCodeGenerator {
     }
 
     public static String generate(PixKey key, String merchantName, String merchantCity, BigDecimal amount) {
+        return generate(key, merchantName, merchantCity, amount, "***");
+    }
+
+    /** Generates an amount-bound BR Code whose additional-data txid identifies one checkout intent. */
+    public static String generate(PixKey key, String merchantName, String merchantCity,
+            BigDecimal amount, String txid) {
         var normalizedName = merchantField(merchantName, 25, "merchant name");
         var normalizedCity = merchantField(merchantCity, 15, "merchant city");
+        var normalizedTxid = normalizeTxid(txid);
         var merchantAccount = field("00", "br.gov.bcb.pix")
                 + field("01", key.value());
         var payload = field("00", "01")
@@ -26,9 +33,19 @@ public final class PixCodeGenerator {
                 + field("58", "BR")
                 + field("59", normalizedName)
                 + field("60", normalizedCity)
-                + field("62", field("05", "***"))
+                + field("62", field("05", normalizedTxid))
                 + "6304";
         return payload + crc16(payload);
+    }
+
+    private static String normalizeTxid(String txid) {
+        if (txid == null || txid.isBlank()) return "***";
+        var normalized = txid.trim();
+        if (!"***".equals(normalized)
+                && (normalized.length() > 25 || !normalized.matches("[A-Za-z0-9]{1,25}"))) {
+            throw new IllegalArgumentException("Pix txid must contain 1 to 25 alphanumeric characters");
+        }
+        return normalized.toUpperCase(Locale.ROOT);
     }
 
     private static String amountField(BigDecimal amount) {
